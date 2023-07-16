@@ -1,0 +1,15 @@
+{
+    "name": "playground",
+    "version-string": "0.0.1",
+    "dependencies": [
+        {
+            "name": "imgui",
+            "default-features": false,
+            "features": [
+                "opengl3-binding",
+                "sdl2-binding",
+                "docking-experimental"
+            ]
+        }
+    ]
+}

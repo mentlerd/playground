@@ -1,0 +1,35 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 26,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "default",
+            "binaryDir": "${sourceDir}/build/default"
+        },
+        {
+            "name": "8051",
+            "binaryDir": "${sourceDir}/build/8051",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": {
+                    "type": "FILEPATH",
+                    "value": "${sourceDir}/toolchains/Toolchain-80C32.cmake"
+                }
+            },
+            "generator": "Ninja"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "default",
+            "configurePreset": "default"
+        },
+        {
+            "name": "8051",
+            "configurePreset": "8051"
+        }
+    ]
+}
