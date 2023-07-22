@@ -1,0 +1,10 @@
+CPU: P 80C32EBPN 224A107 9514hF PHILIPS
+
+Program ROM: ST M27C256B-15XF1 B88CB 9509B ("BKV19 PRG") MD5: 9ff1bdad8997bbf1090c67044c189f1d
+Data ROM: ST M27C256B-15XF1 B88CB 9509B ("BKVCEL KEP II") MD5: a48f927ea83bef74c70f20701d882c5d
+
+Controller board: FOK-GYEM 1.4064.00.000.01 c 1.0
+Distributor board: FOK-GYEM 1.4070 c 2.0
+Panel driver boards: Krueger 93.034.00.00
+
+Panel boards: No designator (16x16) x8
