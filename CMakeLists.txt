@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.26)
 
 # Automatic vcpkg toolchain file injection
-set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/submodules/vcpkg/scripts/buildsystems/vcpkg.cmake CACHE STRING "vcpkg toolchain file")
+include(cmake/vcpkg.cmake)
 
 # This is a toplevel project, we need no languages enabled
 project(playground NONE)
