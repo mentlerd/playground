@@ -9,6 +9,7 @@
             "features": [
                 "opengl3-binding",
                 "sdl2-binding",
+                "metal-binding",
                 "docking-experimental"
             ]
         },

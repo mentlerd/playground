@@ -7,12 +7,29 @@
     },
     "configurePresets": [
         {
+            "name": "common",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}"
+        },
+        {
             "name": "default",
-            "binaryDir": "${sourceDir}/build/default"
+            "inherits": "common"
+        },
+        {
+            "name": "ios",
+            "inherits": "common",
+            "toolchainFile": "${sourceDir}/submodules/ios-cmake/ios.toolchain.cmake",
+            "cacheVariables": {
+                "PLATFORM": "SIMULATOR64",
+                "DEPLOYMENT_TARGET": "13.0",
+
+                "VCPKG_INSTALL_OPTIONS": "--allow-unsupported"
+            },
+            "generator": "Xcode"
         },
         {
             "name": "8051",
-            "binaryDir": "${sourceDir}/build/8051",
+            "inherits": "common",
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": {
                     "type": "FILEPATH",
