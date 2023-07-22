@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.26)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 project(imgui_metal_demo CXX OBJCXX)
 
 find_package(SDL2 CONFIG REQUIRED)

@@ -19,9 +19,8 @@ int main(int argc, char* argv[]) {
     
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;
-    
-    io.MouseDrawCursor = true;
     
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
         printf("Error: %s\n", SDL_GetError());
@@ -52,7 +51,11 @@ int main(int argc, char* argv[]) {
     layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
     
     ImGui_ImplMetal_Init(layer.device);
-    ImGui_ImplSDL2_InitForMetal(window);
+    
+    // NB: ImGui_ImplSDL2_InitForMetal(...) results in incorrect scaling. The backend uses
+    //  SDL_GL_GetDrawableSize(...) instead of SDL_GetRendererOutputSize(...), rendering at
+    //  half resolution.
+    ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
 
     id<MTLCommandQueue> commandQueue = [layer.device newCommandQueue];
     MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor new];
