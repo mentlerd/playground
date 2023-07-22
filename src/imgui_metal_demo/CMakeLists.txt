@@ -18,8 +18,21 @@ PRIVATE
 )
 
 set_target_properties(imgui_metal_demo PROPERTIES
-	MACOSX_BUNDLE_BUNDLE_NAME foo
-	MACOSX_BUNDLE_BUNDLE_VERSION 0.1
-	MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1
-	MACOSX_BUNDLE_GUI_IDENTIFIER foo.bar
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER  "com.example.someapp"
+    XCODE_ATTRIBUTE_PRODUCT_NAME               "SomeApp"
+    XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION    "1.0"
+    XCODE_ATTRIBUTE_MARKETING_VERSION          "1.0"
+    XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY     "1,2"
+
+    XCODE_ATTRIBUTE_VALIDATE_PRODUCT[variant=Release]       YES
+    XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME      AppIcon
+    XCODE_ATTRIBUTE_GENERATE_INFOPLIST_FILE                 YES
+    XCODE_ATTRIBUTE_INFOPLIST_FILE                          ""
+    XCODE_ATTRIBUTE_INFOPLIST_KEY_CFBundleDisplayName       "Some name to show the user"
+    XCODE_ATTRIBUTE_INFOPLIST_KEY_NSHumanReadableCopyright  "(c)2023 Example Co."
+
+    XCODE_ATTRIBUTE_INFOPLIST_KEY_NSHighResolutionCapable YES
+    XCODE_ATTRIBUTE_INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents YES
+    XCODE_ATTRIBUTE_INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad   "UIInterfaceOrientationPortrait"
+    XCODE_ATTRIBUTE_INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone "UIInterfaceOrientationPortrait"
 )

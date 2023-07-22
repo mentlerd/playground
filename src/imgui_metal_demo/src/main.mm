@@ -15,18 +15,27 @@ int main(int argc, char* argv[]) {
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     
-    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-
+    auto& io = ImGui::GetIO();
+    
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;
+    
+    io.MouseDrawCursor = true;
+    
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0) {
         printf("Error: %s\n", SDL_GetError());
         return -1;
     }
 
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "metal");
-    SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
-
-    auto* window = SDL_CreateWindow("", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 0, 0, SDL_WINDOW_FULLSCREEN | SDL_WINDOW_ALLOW_HIGHDPI);
+    auto* window = SDL_CreateWindow(
+        "Title",
+        SDL_WINDOWPOS_UNDEFINED,
+        SDL_WINDOWPOS_UNDEFINED,
+        0,
+        0,
+        SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_METAL | SDL_WINDOW_ALLOW_HIGHDPI
+    );
     if (!window) {
         printf("Error creating window: %s\n", SDL_GetError());
         return -2;
