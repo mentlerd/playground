@@ -1,8 +1,108 @@
 
 #include <string_view>
 #include <array>
+#include <cstdio>
+#include <cmath>
 
 struct Opcode {
+    static constexpr std::size_t parseInt(std::string_view pattern, std::size_t& i) {
+        auto result = size_t(pattern[i]) - '0';
+        if (result > 9) {
+            throw;
+        }
+
+        while (true) {
+            if (++i == pattern.size()) {
+                break;
+            }
+
+            auto raw = size_t(pattern[i]) - '0';
+            if (raw > 9) {
+                break;
+            }
+
+            result = result * 10 + raw;
+        }
+
+        return result;
+    }
+
+    constexpr Opcode(std::string_view mnemonic, const std::string_view pattern)
+    : mnemonic(mnemonic)
+    , pattern(pattern)
+    {
+        std::size_t streamOffset = 0;
+        bool didSanityCheck = true;
+
+        for (std::size_t i = 0; i < pattern.size(); i++) {
+            const auto chr = pattern[i];
+
+            // Ignore whitespace
+            if (chr == ' ') {
+                continue;
+            }
+
+            // Perform sanity check
+            if (streamOffset % 8 == 0) {
+                if (chr == ';') {
+                    didSanityCheck = true;
+                    continue;
+                }
+                if (!didSanityCheck) {
+                    throw;
+                }
+            } else {
+                if (chr == ';') {
+                    throw;
+                }
+                didSanityCheck = false;
+            }
+
+            // Parse literals
+            if (chr == '0' || chr == '1') {
+                streamOffset++;
+                continue;
+            }
+
+            // Parse bit capture name
+            while (pattern[i] != '[') {
+                if (++i == pattern.size()) {
+                    throw;
+                }
+            }
+
+            if (++i == pattern.size()) {
+                throw;
+            }
+
+            // Parse range start
+            std::size_t start = parseInt(pattern, i);
+            std::size_t end;
+
+            if (pattern[i] == ']') {
+                end = start; // Single bit capture
+            } else if (pattern[i] == '-') {
+                if (++i == pattern.size()) {
+                    throw;
+                }
+
+                end = parseInt(pattern, i);
+            } else {
+                throw;
+            }
+
+            if (pattern[i] != ']') {
+                throw;
+            }
+
+            if (start <= end) {
+                streamOffset += end - start + 1;
+            } else {
+                streamOffset += start - end + 1;
+            }
+        }
+    }
+
 	std::string_view mnemonic;
 	std::string_view pattern;
 };
@@ -127,7 +227,7 @@ static constexpr std::array g_opcodes = {
 	Opcode{"HALT",              "10100000;"},
 
 	// Increment
-	Opcode{"INC #3, r"          "r[0-2] 1 z[0-1] 11; #3[0-2] 00110;"},
+	Opcode{"INC #3, r",         "r[0-2] 1 z[0-1] 11; #3[0-2] 00110;"},
 	Opcode{"INC<W> #3,(mem)",   "mem[0-3] z[0] 0 mem[4] 1; #3[0-2] 00110;"},
 
 	// Increment Register File Pointer
@@ -136,7 +236,7 @@ static constexpr std::array g_opcodes = {
 	// Jump
 	Opcode{"JP #16",            "01011000; #16[0-15];"},
 	Opcode{"JP #24",            "11011000; #24[0-23];"},
-	Opcode{"JP [cc,]mem"        "mem[0-3] 11 mem[4] 1; cc[0-2] 1011;"},
+	Opcode{"JP [cc,]mem",       "mem[0-3] 11 mem[4] 1; cc[0-2] 1011;"},
 
 	// Jump Relative
 	Opcode{"JR [cc,]$+2+d8",    "cc[0-2] 0110; d8[0-7];"},
@@ -191,7 +291,7 @@ static constexpr std::array g_opcodes = {
 	Opcode{"LDIR<W> (XIX+),(XIY+)",   "1010 z[0] 001; 10001000;"},
 
 	// Load eXtract
-	Opcode{"LDX (#8),#"          "11101111; 00000000; #8[0-7]; 00000000; #[0-7]; 00000000;"},
+	Opcode{"LDX (#8),#",         "11101111; 00000000; #8[0-7]; 00000000; #[0-7]; 00000000;"},
 
 	// Link
 	Opcode{"LINK r,d16",         "r[0-2] 10111; 00110000; d16[0-15];"},
@@ -365,7 +465,7 @@ static constexpr std::array g_opcodes = {
 	Opcode{"SUB r,#",            "r[0-2] 1 z[0-1] 11; 01010011; #[0-31];"},
 	Opcode{"SUB R,(mem)",        "mem[0-3] z[0-1] mem[4] 1; R[0-2] 10101;"},
 	Opcode{"SUB (mem),R",        "mem[0-3] z[0-1] mem[4] 1; R[0-2] 10101;"},
-	Opcode{"SUB<W> (mem),#"      "mem[0-3] z[0] 0 mem[4] 1; 01011100; #[0-15];"},
+	Opcode{"SUB<W> (mem),#",     "mem[0-3] z[0] 0 mem[4] 1; 01011100; #[0-15];"},
 
 	// Software Interrupt
 	Opcode{"SWI [#3]",           "#3[0-2] 11111;"},
@@ -393,3 +493,7 @@ static constexpr std::array g_opcodes = {
 	// Zero flag to Carry Flag
 	Opcode{"ZCF",                "11001000;"},
 };
+
+int main() {
+    return 0;
+}
