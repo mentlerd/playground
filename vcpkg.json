@@ -5,14 +5,28 @@
         "sdl2",
         {
             "name": "imgui",
-            "default-features": false,
             "features": [
-                "opengl3-binding",
                 "sdl2-binding",
-                "metal-binding",
                 "docking-experimental"
             ]
         },
-        "opengl"
+        {
+            "name": "imgui",
+            "features": [    
+                "metal-binding"
+            ],
+            "platform": "!windows"
+        },
+        {
+            "name": "imgui",
+            "features": [
+                "opengl3-binding"
+            ],
+            "platform": "windows"
+        },
+        {
+            "name": "opengl",
+            "platform": "windows"
+        }
     ]
 }
