@@ -4,10 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-__sbit __at(0x80) p_dataIn;
-__sbit __at(0x81) p_clock;
-__sbit __at(0x82) p_strobe;
-__sbit __at(0x83) p_outputEnable;
+__sbit __at(0x90) p_dataIn;
+__sbit __at(0x91) p_clock;
+__sbit __at(0x92) p_strobe;
+__sbit __at(0x93) p_outputEnable;
 
 /// Send 8 bits of information to the parallel port, MSB first
 void p_feed(uint8_t value) {
@@ -39,9 +39,25 @@ void flip(bool dir, uint8_t x, uint8_t y) {
     p_strobe = false;
 }
 
-void main(void) {
-    flip(true, 2, 3);
+void delay(void) {
+	for (uint8_t i = 0; i < 100; i++) {
+		for (uint8_t j = 0; j < 100; j++) {
+			continue;
+		}
+	}
+}
 
+void main(void) {
     while (true) {
+		for (uint8_t state = 0; state < 2; state++) {
+			for (uint8_t x = 0; x < 16; x++) {
+				for (uint8_t y = 0; y < 16; y++) {
+					flip(state, x, y);
+					delay();
+				}
+			}
+
+			delay();
+		}
     }
 }
