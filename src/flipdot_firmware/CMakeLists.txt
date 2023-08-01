@@ -26,6 +26,7 @@ set_target_properties(firmware PROPERTIES
 )
 
 add_custom_command(
+	DEPENDS firmware
 	OUTPUT ${PROJECT_BINARY_DIR}/firmware.bin
 	COMMAND ${MAKEBIN}
 	ARGS -s 0x8000 $<TARGET_FILE:firmware> ${PROJECT_BINARY_DIR}/firmware.bin
