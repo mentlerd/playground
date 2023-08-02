@@ -4,20 +4,27 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-__sbit __at(0x90) p_dataIn;
-__sbit __at(0x91) p_clock;
-__sbit __at(0x92) p_strobe;
-__sbit __at(0x93) p_disable;
+__sbit __at(0xB5) g_watchdogResetPin;
+
+void watchdog(void) {
+    g_watchdogResetPin = true;
+    g_watchdogResetPin = false;
+}
+
+__sbit __at(0x90) g_pixelPortDataIn;
+__sbit __at(0x91) g_pixelPortClock;
+__sbit __at(0x92) g_pixelPortStrobe;
+__sbit __at(0x93) g_pixelPortDisable;
 
 /// Send 8 bits of information to the parallel port, MSB first
-void p_feed(uint8_t value) {
+void pixelPortWriteByte(uint8_t value) {
     for (uint8_t i = 0; i < 8; i++) {
         // Send MSB first
-        p_dataIn = (value & 0x80);
+        g_pixelPortDataIn = (value & 0x80);
 
         // Data shifted in on rising edge
-        p_clock = false;
-        p_clock = true;
+        g_pixelPortClock = false;
+        g_pixelPortClock = true;
 
         // Shift data upwards
         value <<= 1;
@@ -25,9 +32,9 @@ void p_feed(uint8_t value) {
 }
 
 void delay(void) {
-    for (uint8_t i = 0; i < 50; i++) {
+    for (uint8_t i = 0; i < 10; i++) {
         for (uint8_t j = 0; j < 100; j++) {
-            // Wait
+            watchdog();
         }
     }
 }
@@ -35,36 +42,37 @@ void delay(void) {
 /// Send a pixel flip command to the distributor
 void flip(bool dir, uint8_t x, uint8_t y) {
     // mode?
-    p_feed(0xFE);
+    pixelPortWriteByte(0xFE);
 
     // column bank
-    p_feed(x >> 3);
+    pixelPortWriteByte(x >> 4);
 
     // column
-    p_feed(x & 7);
+    pixelPortWriteByte(x & 15);
 
     // direction + row
-    p_feed((dir << 7) | (y & 15));
+    pixelPortWriteByte((dir << 7) | (y & 15));
 
-    p_strobe = true;
-    p_strobe = false;
+    g_pixelPortStrobe = true;
+    g_pixelPortStrobe = false;
+
+    watchdog();
 }
 
 void main(void) {
     delay();
     delay();
 
-    p_disable = false;
+    g_pixelPortDisable = false;
 
     while (true) {
-        for (uint8_t y = 0; y < 16; y++) {
-            flip(true, 0, y);
-            delay();
-        }
-
-        for (uint8_t y = 0; y < 16; y++) {
-            flip(false, 0, y);
-            delay();
+        for (uint8_t dir = 0; dir < 2; dir++) {
+            for (uint8_t x = 0; x < 16; x++) {
+                for (uint8_t y = 0; y < 16; y++) {
+                    flip(dir, x, y);
+                    delay();
+                }
+            }
         }
     }
 }
