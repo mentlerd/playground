@@ -1,4 +1,8 @@
 
+#ifndef __SDCC_STACK_AUTO
+#error "Code is not reentrancy aware"
+#endif
+
 #include <8051.h>
 
 #include <stdbool.h>
@@ -15,6 +19,8 @@ __sbit __at(0x90) g_pixelPortDataIn;
 __sbit __at(0x91) g_pixelPortClock;
 __sbit __at(0x92) g_pixelPortStrobe;
 __sbit __at(0x93) g_pixelPortDisable;
+
+__sbit __at(0x94) g_serialReceiveDisable;
 
 /// Send 8 bits of information to the parallel port, MSB first
 void pixelPortWriteByte(uint8_t value) {
@@ -99,26 +105,90 @@ void hexString(uint8_t data[], uint8_t len) {
 
 volatile __xdata __at(0x8000) uint8_t kConfig = 0;
 
+volatile uint8_t g_recv = 0;
+
+void interrupt_external_0(void) __interrupt(0) {
+    // Disabled
+}
+
+void interrupt_timer_0(void) __interrupt(1) {
+    // Disabled
+}
+
+void interrupt_external_1(void) __interrupt(2) {
+    // Disabled
+}
+
+void interrupt_timer_1(void) __interrupt(3) {
+    // Disabled
+}
+
+void interrupt_serial(void) __interrupt(4) {
+    g_recv = SBUF;
+
+    // Clear interrupt flag to continue receiving interrupts
+    RI = false;
+}
+
 void main(void) {
     delay();
     delay();
 
+    // Serial mode setup
+    {
+        // 11...... = 9 bit UART
+        // ..0..... = Disable multiprocessor communication
+        // ...1.... = Enable serial reception
+        // ....0... = 9th bit to transmit
+        SCON = 0b11010000;
+
+        // Enable interrupt
+        ES = true;
+
+        // High priority interrupt
+        PS = 1;
+    }
+
+    // Timer 1 setup (19200 baud rate generator), 11.0592 MHz crystal
+    {
+        // 0...---- = Enable timer with TR1
+        // .0..---- = Use system clock as source
+        // ..10---- = 8-bit auto reload timer (reloaded from TH1)
+        TMOD = 0b00100000;
+
+        // Required reset value
+        TH1 = 0xFD;
+
+        // 1....... = Enable baud rate doubling
+        PCON = 0b10000000;
+    }
+
+    // Finish startup
+    {
+        // Enable specified interrupts
+        EA = true;
+
+        // Start Timer 1
+        TR1 = true;
+    }
+
+    g_serialReceiveDisable = false;
     g_pixelPortDisable = false;
 
+    uint8_t prev = 0;
+    uint8_t curr = 0;
+
     while (true) {
-        hexString(&kConfig, 1);
+        for (uint8_t i = 0; i < 32; i++) {
+            curr = g_recv;
 
-        for (uint8_t d = 0; d < 100; d++) {
-            delay();
-        }
+            if (prev != curr) {
+                prev = curr;
 
-        for (uint8_t dir = 0; dir < 2; dir++) {
-            for (uint8_t y = 0; y < 16; y++) {
-                for (uint8_t x = 0; x < 32; x++) {
-                    flip(!dir, x, y);
-                }
-                delay();
+                hexString(&prev, 1);
             }
+
+            flip(i > 15, i & 15, 10);
 
             delay();
             delay();
