@@ -97,6 +97,8 @@ void hexString(uint8_t data[], uint8_t len) {
     }
 }
 
+volatile __xdata __at(0x8000) uint8_t kConfig = 0;
+
 void main(void) {
     delay();
     delay();
@@ -104,9 +106,7 @@ void main(void) {
     g_pixelPortDisable = false;
 
     while (true) {
-        uint8_t data[] = {0xAB, 0xCD, 0x12};
-
-        hexString(data, 3);
+        hexString(&kConfig, 1);
 
         for (uint8_t d = 0; d < 100; d++) {
             delay();
