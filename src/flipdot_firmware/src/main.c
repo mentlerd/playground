@@ -32,7 +32,7 @@ void pixelPortWriteByte(uint8_t value) {
 }
 
 void delay(void) {
-    for (uint8_t i = 0; i < 10; i++) {
+    for (uint8_t i = 0; i < 5; i++) {
         for (uint8_t j = 0; j < 100; j++) {
             watchdog();
         }
@@ -67,12 +67,15 @@ void main(void) {
 
     while (true) {
         for (uint8_t dir = 0; dir < 2; dir++) {
-            for (uint8_t x = 0; x < 16; x++) {
-                for (uint8_t y = 0; y < 16; y++) {
+            for (uint8_t y = 0; y < 16; y++) {
+                for (uint8_t x = 0; x < 32; x++) {
                     flip(dir, x, y);
-                    delay();
                 }
+                delay();
             }
+
+            delay();
+            delay();
         }
     }
 }
