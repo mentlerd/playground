@@ -3,6 +3,14 @@
 #error "Code is not reentrancy aware"
 #endif
 
+#ifndef DISPLAY_W
+#define DISPLAY_W 16
+#endif
+
+#ifndef DISPLAY_H
+#define DISPLAY_H 16
+#endif
+
 #include <8051.h>
 
 #include <stdbool.h>
@@ -46,7 +54,7 @@ void delay(void) {
 }
 
 /// Send a pixel flip command to the distributor
-void flip(bool dir, uint8_t x, uint8_t y) {
+void pixel(uint8_t x, uint8_t y, bool dir) {
     // mode?
     pixelPortWriteByte(0xFE);
 
@@ -91,15 +99,15 @@ void hex(uint8_t x, uint8_t y, uint8_t value) {
         uint8_t column = kSmallHexFont[value][offX];
 
         for (uint8_t offY = 0; offY < 5; offY++) {
-            flip((column >> (4 - offY)) & 1, x + offX, y + offY);
+            pixel(x + offX, y + offY, (column >> (4 - offY)) & 1);
         }
     }
 }
 
-void hexString(uint8_t data[], uint8_t len) {
+void hexString(uint8_t x, uint8_t y, uint8_t data[], uint8_t len) {
     for (uint8_t i = 0; i < len; i++) {
-        hex(i * 8 + 0, 0, data[i] >> 4);
-        hex(i * 8 + 4, 0, data[i] & 15);
+        hex(x + i * 8 + 0, y, data[i] >> 4);
+        hex(x + i * 8 + 4, y, data[i] & 15);
     }
 }
 
@@ -129,6 +137,8 @@ void interrupt_serial(void) __interrupt(4) {
     // Clear interrupt flag to continue receiving interrupts
     RI = false;
 }
+
+volatile __xdata __at(0x1FF8 | (1 << 13)) uint8_t g_clockData[7];
 
 void main(void) {
     delay();
@@ -175,23 +185,56 @@ void main(void) {
     g_serialReceiveDisable = false;
     g_pixelPortDisable = false;
 
+    for (uint8_t x = 0; x < DISPLAY_W; x++) {
+        for (uint8_t y = 0; y < DISPLAY_H; y++) {
+            pixel(x, y, false);
+        }
+    }
+
+    pixel(9, 2, true);
+    pixel(9, 4, true);
+    pixel(19, 2, true);
+    pixel(19, 4, true);
+
+    if (kConfig & 1) {
+        // 1....... = Write
+        // .0...... = Read
+        // ..1..... = Stop
+        // ...01000 = Calibration
+        g_clockData[0] = 0b10101000;
+
+        for (uint8_t i = 1; i < 8; i++) {
+            g_clockData[i] = 0;
+        }
+    }
+
     uint8_t prev = 0;
-    uint8_t curr = 0;
+    uint8_t curr;
 
     while (true) {
-        for (uint8_t i = 0; i < 32; i++) {
-            curr = g_recv;
+        // 0100..... = Read
+        g_clockData[0] = 0b01001000;
 
-            if (prev != curr) {
-                prev = curr;
+        curr = g_clockData[1];
 
-                hexString(&prev, 1);
+        if (prev != curr) {
+            prev = curr;
+        } else {
+            // 000..... = Update
+            g_clockData[0] = 0b00001000;
+
+            for (uint8_t i = 0; i < 10; i++) {
+                delay();
             }
-
-            flip(i > 15, i & 15, 10);
-
-            delay();
-            delay();
+            continue;
         }
+
+        // HH:MM:SS
+        hexString(1, 1, &g_clockData[3], 1);
+        hexString(11, 1, &g_clockData[2], 1);
+        hexString(21, 1, &g_clockData[1], 1);
+
+        // 000..... = Update
+        g_clockData[0] = 0b00001000;
     }
 }
