@@ -2,12 +2,14 @@
 NEOGEO Pocket aware TLCS900H Disassembler v0.36
    (c) 2001-2 Jouni 'Mr.Spiv' Korhonen
 
-Loaded 65536 (10000h) bytes. Extra space is 0 bytes.
+Loaded 8192 (2000h) bytes. Extra space is 0 bytes.
 
-00008000: F7 00 6A 00 9C 00 LDX   (6Ah),09Ch
-00008006: 06 07             DI    
-00008008: 17 00             LDF   0
-0000800A: 78 F301           JRL   0008200h
+vector_RESET:
+   00008000: F7 00 6A 00 9C 00 LDX   (6Ah),09Ch
+   00008006: 06 07             DI    
+   00008008: 17 00             LDF   0
+   0000800A: 78 F301           JRL   0008200h
+
 00008010: 78 F180           JRL   0000104h
 00008020: 78 E580           JRL   0000108h
 00008030: 78 D980           JRL   000010Ch
@@ -30,18 +32,36 @@ Loaded 65536 (10000h) bytes. Extra space is 0 bytes.
 00008140: 78 0D80           JRL   0000150h
 00008150: 78 0180           JRL   0000154h
 00008160: 1A 5801           JP    00158h
+
+0000816C: 78 EA0B           JRL   0008D59h
+
 00008170: 1A 5C01           JP    0015Ch
-00008180: 1A 6001           JP    00160h
-00008190: 1A 6401           JP    00164h
-000081A0: 1A 6801           JP    00168h
-000081B0: 1A 6C01           JP    0016Ch
+
+vector_INTRX0:
+   00008180: 1A 6001           JP    00160h
+
+vector_INTTX0:
+   00008190: 1A 6401           JP    00164h
+
+vector_INTRX1:
+   000081A0: 1A 6801           JP    00168h
+
+vector_INTTX1:
+   000081B0: 1A 6C01           JP    0016Ch -> 08D59h
+
 000081C0: 1A 7001           JP    00170h
 000081D0: 07                RETI  
+000081DE: 0D                DECF  
+000081DF: 0D                DECF  
 000081E0: 07                RETI  
+000081EE: 0D                DECF  
+000081EF: 0D                DECF  
 000081F0: 07                RETI  
+000081FE: 0D                DECF  
+000081FF: 00                NOP   
 
 00008200: 47 80040000       LD    XSP,000000480h
-00008205: 04                ?????
+00008205: 04                MAX
 00008206: 08 5C 00          LD    (5Ch),000h
 00008209: 08 5D B1          LD    (5Dh),0B1h
 0000820C: 08 08 FF          LD    (08h),0FFh
@@ -102,10 +122,13 @@ Loaded 65536 (10000h) bytes. Extra space is 0 bytes.
 000082C4: 08 51 80          LD    (51h),080h
 000082C7: 08 53 16          LD    (53h),016h
 000082CA: 08 77 33          LD    (77h),033h
+
+; Interrupt handler setup?
 000082CD: 30 4088           LD    WA,08840h
 000082D0: F1 6101 50        LD    (0161h),WA
 000082D4: 30 0D89           LD    WA,0890Dh
 000082D7: F1 6501 50        LD    (0165h),WA
+
 000082DB: F1 1101 50        LD    (0111h),WA
 000082DF: F1 8201 BB        SET   3,(0182h)
 000082E3: F1 8E01 00 6F     LD    (018Eh),06Fh
@@ -135,11 +158,19 @@ Loaded 65536 (10000h) bytes. Extra space is 0 bytes.
 00008340: F1 8101 C9        BIT   1,(0181h)
 00008344: 6E 17             JR    NE/NZ,000835Dh
 00008346: 1C 078C           CALL  08C07h
-00008349: F1 8001 CE        BIT   6,(0180h)
-0000834D: 66 BE             JR    EQ/Z,000830Dh
-0000834F: F1 8001 B6        RES   6,(0180h)
-00008353: 1C 6985           CALL  08569h
-00008356: 68 B5             JR    000830Dh
+
+   ; if (serial_status.6)
+   00008349: F1 8001 CE        BIT   6,(serial_status? 0180h)
+   0000834D: 66 BE             JR    EQ/Z,000830Dh
+
+      ; serial_status.6 = false;
+      0000834F: F1 8001 B6        RES   6,(serial_status? 0180h)
+
+      ; call message handler?
+      00008353: 1C 6985           CALL  08569h
+
+      00008356: 68 B5             JR    000830Dh
+
 00008358: 1C DF8B           CALL  08BDFh
 0000835B: 68 E9             JR    0008346h
 0000835D: F1 8201 BB        SET   3,(0182h)
@@ -281,145 +312,224 @@ Loaded 65536 (10000h) bytes. Extra space is 0 bytes.
 00008562: 1C F48B           CALL  08BF4h
 00008565: 78 D8FD           JRL   0008340h
 00008568: 0E                RET   
-00008569: F1 8001 B6        RES   6,(0180h)
-0000856D: C0 13 21          LD    A,(13h)
-00008570: C9 06             CPL   A
-00008572: C9 CC 0F          AND   A,00Fh
-00008575: C0 18 20          LD    W,(18h)
-00008578: C8 06             CPL   W
-0000857A: C8 23 00          LDCF  000h,W
-0000857D: C9 24 04          STCF  004h,A
-00008580: C1 9B01 F1        CP    A,(019Bh)
-00008584: B0 FE             RET   NE/NZ
-00008586: C1 9C01 3F 00     CP    (019Ch),000h
-0000858B: 66 41             JR    EQ/Z,00085CEh
-0000858D: C1 9C01 3F 80     CP    (019Ch),080h
-00008592: 66 05             JR    EQ/Z,0008599h
-00008594: F1 8401 B9        SET   1,(0184h)
-00008598: 0E                RET   
-00008599: EA A8             LD    XDE,000h
-0000859B: E9 A8             LD    XBC,000h
-0000859D: C1 8813 25        LD    E,(1388h)
-000085A1: CD 08 04          MUL   E,004h
-000085A4: DA 08 FF00        MUL   DE,000FFh
-000085A8: C1 8713 23        LD    C,(1387h)
-000085AC: D9 08 1000        MUL   BC,00010h
-000085B0: E9 82             ADD   XDE,XBC
-000085B2: EA C8 8A130000    ADD   XDE,00000138Ah
-000085B8: 43 9D010000       LD    XhL,00000019Dh
-000085BD: 31 1000           LD    BC,00010h
-000085C0: 83 11             LDIR  [(XDE+),(XhL+)]
-000085C2: C1 8713 61        INC   1,(1387h)
-000085C6: F1 8101 B6        RES   6,(0181h)
-000085CA: 1C 2D87           CALL  0872Dh
-000085CD: 0E                RET   
-000085CE: C1 9D01 3F 10     CP    (019Dh),010h
-000085D3: 6E BF             JR    NE/NZ,0008594h
-000085D5: C1 9E01 3F 04     CP    (019Eh),004h
-000085DA: 6E 0F             JR    NE/NZ,00085EBh
-000085DC: C1 9F01 3F 00     CP    (019Fh),000h
-000085E1: 6E B1             JR    NE/NZ,0008594h
-000085E3: F1 8101 B6        RES   6,(0181h)
-000085E7: 1C 9687           CALL  08796h
-000085EA: 0E                RET   
-000085EB: C1 9E01 3F 04     CP    (019Eh),004h
-000085F0: 6E 0F             JR    NE/NZ,0008601h
-000085F2: C1 9F01 3F 00     CP    (019Fh),000h
-000085F7: 6E 9B             JR    NE/NZ,0008594h
-000085F9: F1 8101 B6        RES   6,(0181h)
-000085FD: 1C 2D87           CALL  0872Dh
-00008600: 0E                RET   
-00008601: C1 9E01 3F 0B     CP    (019Eh),00Bh
-00008606: 6E 4E             JR    NE/NZ,0008656h
-00008608: C1 9F01 3F 00     CP    (019Fh),000h
-0000860D: 6E 85             JR    NE/NZ,0008594h
-0000860F: F1 8101 B4        RES   4,(0181h)
-00008613: C1 A801 3F FF     CP    (01A8h),0FFh
-00008618: 6E 1B             JR    NE/NZ,0008635h
-0000861A: 20 19             LD    W,019h
-0000861C: 42 8D120000       LD    XDE,00000128Dh
-00008621: B2 00 00          LD    (XDE),000h
-00008624: EA C8 0A000000    ADD   XDE,00000000Ah
-0000862A: C8 1C F4          DJNZ  W,0008621h
-0000862D: F1 8101 B6        RES   6,(0181h)
-00008631: 1C 2D87           CALL  0872Dh
-00008634: 0E                RET   
-00008635: C1 A801 25        LD    E,(01A8h)
-00008639: CD 69             DEC   1,E
-0000863B: CD CF 19          CP    E,019h
-0000863E: B0 FF             RET   NC/UGE
-00008640: CD 08 0A          MUL   E,00Ah
-00008643: EA 12             EXTZ  XDE
-00008645: EA C8 8D120000    ADD   XDE,00000128Dh
-0000864B: B2 00 00          LD    (XDE),000h
-0000864E: F1 8101 B6        RES   6,(0181h)
-00008652: 1C 2D87           CALL  0872Dh
-00008655: 0E                RET   
-00008656: C1 9E01 3F 01     CP    (019Eh),001h
-0000865B: 6E 46             JR    NE/NZ,00086A3h
-0000865D: C1 9F01 3F 00     CP    (019Fh),000h
-00008662: 7E 2FFF           JRL   NE/NZ,0008594h
-00008665: C1 A801 3F 00     CP    (01A8h),000h
-0000866A: 6E 0C             JR    NE/NZ,0008678h
-0000866C: F1 8101 BD        SET   5,(0181h)
-00008670: F1 8101 B6        RES   6,(0181h)
-00008674: 1C 2D87           CALL  0872Dh
-00008677: 0E                RET   
-00008678: C1 A801 3F 01     CP    (01A8h),001h
-0000867D: 6E 0C             JR    NE/NZ,000868Bh
-0000867F: F1 8101 B8        SET   0,(0181h)
-00008683: F1 8101 B6        RES   6,(0181h)
-00008687: 1C 2D87           CALL  0872Dh
-0000868A: 0E                RET   
-0000868B: C1 A801 3F 02     CP    (01A8h),002h
-00008690: B0 FE             RET   NE/NZ
-00008692: F1 8101 B4        RES   4,(0181h)
-00008696: F1 8101 BE        SET   6,(0181h)
-0000869A: F1 8913 00 00     LD    (1389h),000h
-0000869F: 1C 2D87           CALL  0872Dh
-000086A2: 0E                RET   
-000086A3: C1 9E01 3F 02     CP    (019Eh),002h
-000086A8: 6E 40             JR    NE/NZ,00086EAh
-000086AA: C1 9F01 3F 00     CP    (019Fh),000h
-000086AF: 6E 31             JR    NE/NZ,00086E2h
-000086B1: F1 8101 B4        RES   4,(0181h)
-000086B5: F1 8713 00 00     LD    (1387h),000h
-000086BA: C1 A801 25        LD    E,(01A8h)
-000086BE: CD 69             DEC   1,E
-000086C0: F1 8813 45        LD    (1388h),E
-000086C4: DA 12             EXTZ  DE
-000086C6: CD 08 0A          MUL   E,00Ah
-000086C9: EA 12             EXTZ  XDE
-000086CB: EA C8 8D120000    ADD   XDE,00000128Dh
-000086D1: D9 AE             LD    BC,006h
-000086D3: 43 A8010000       LD    XhL,0000001A8h
-000086D8: 83 11             LDIR  [(XDE+),(XhL+)]
-000086DA: F1 8101 B6        RES   6,(0181h)
-000086DE: 1C 2D87           CALL  0872Dh
-000086E1: 0E                RET   
-000086E2: F1 8101 B6        RES   6,(0181h)
-000086E6: 1C 2D87           CALL  0872Dh
-000086E9: 0E                RET   
-000086EA: C1 9E01 3F 09     CP    (019Eh),009h
-000086EF: 6E 14             JR    NE/NZ,0008705h
-000086F1: C1 9F01 3F 00     CP    (019Fh),000h
-000086F6: 7E 9BFE           JRL   NE/NZ,0008594h
-000086F9: F1 8101 BF        SET   7,(0181h)
-000086FD: F1 8101 B6        RES   6,(0181h)
-00008701: 1C 2D87           CALL  0872Dh
-00008704: 0E                RET   
-00008705: C1 9E01 3F 20     CP    (019Eh),020h
-0000870A: 7E 87FE           JRL   NE/NZ,0008594h
-0000870D: C1 9F01 3F 00     CP    (019Fh),000h
-00008712: 7E 7FFE           JRL   NE/NZ,0008594h
-00008715: F1 8101 B6        RES   6,(0181h)
-00008719: 1C 2D87           CALL  0872Dh
-0000871C: 0E                RET   
+
+func_08569: // message handler
+   00008569: F1 8001 B6        RES   6,(serial_status? 0180h)
+
+   ; if (msg[1] != ... /* addr? */) return;
+   0000856D: C0 13 21          LD    A,(13h)
+   00008570: C9 06             CPL   A
+   00008572: C9 CC 0F          AND   A,00Fh
+   00008575: C0 18 20          LD    W,(18h)
+   00008578: C8 06             CPL   W
+   0000857A: C8 23 00          LDCF  000h,W
+   0000857D: C9 24 04          STCF  004h,A
+   00008580: C1 9B01 F1        CP    A,(019Bh)
+   00008584: B0 FE             RET   NE/NZ
+
+   ; if (msg[2] != 0x00)
+   00008586: C1 9C01 3F 00     CP    (019Ch),000h
+   0000858B: 66 41             JR    EQ/Z,00085CEh
+
+      ; if (msg[2] != 0x80)
+      0000858D: C1 9C01 3F 80     CP    (019Ch),080h
+      00008592: 66 05             JR    EQ/Z,0008599h
+
+         00008594: F1 8401 B9        SET   1,(0184h)
+         00008598: 0E                RET   
+
+      ; else // (msg[2] == 0x80)
+
+         00008599: EA A8             LD    XDE,000h
+         0000859B: E9 A8             LD    XBC,000h
+         0000859D: C1 8813 25        LD    E,(1388h)
+         000085A1: CD 08 04          MUL   E,004h
+         000085A4: DA 08 FF00        MUL   DE,000FFh
+         000085A8: C1 8713 23        LD    C,(1387h)
+         000085AC: D9 08 1000        MUL   BC,00010h
+         000085B0: E9 82             ADD   XDE,XBC
+         000085B2: EA C8 8A130000    ADD   XDE,00000138Ah
+         000085B8: 43 9D010000       LD    XhL,00000019Dh
+         000085BD: 31 1000           LD    BC,00010h
+         000085C0: 83 11             LDIR  [(XDE+),(XhL+)]
+         000085C2: C1 8713 61        INC   1,(1387h)
+         000085C6: F1 8101 B6        RES   6,(0181h)
+         000085CA: 1C 2D87           CALL  0872Dh
+         000085CD: 0E                RET  
+
+   ; else // (msg[2] == 0x00) 
+
+      ; if (msg[3] != 0x10) return;
+      000085CE: C1 9D01 3F 10     CP    (019Dh),010h
+      000085D3: 6E BF             JR    NE/NZ,0008594h
+
+      ; if (msg[4] == 0x04)
+      000085D5: C1 9E01 3F 04     CP    (019Eh),004h
+      000085DA: 6E 0F             JR    NE/NZ,00085EBh
+
+         ; if (msg[5] != 0x00) return;
+         000085DC: C1 9F01 3F 00     CP    (019Fh),000h
+         000085E1: 6E B1             JR    NE/NZ,0008594h
+
+         000085E3: F1 8101 B6        RES   6,(0181h)
+         000085E7: 1C 9687           CALL  08796h
+         000085EA: 0E                RET   
+
+      ; if (msg[4] == 0x04)
+      000085EB: C1 9E01 3F 04     CP    (019Eh),004h
+      000085F0: 6E 0F             JR    NE/NZ,0008601h
+
+         ; if (msg[5] != 0x00) return;                    <-- Broken/disabled code, or I am mistaking something
+         000085F2: C1 9F01 3F 00     CP    (019Fh),000h
+         000085F7: 6E 9B             JR    NE/NZ,0008594h
+
+         000085F9: F1 8101 B6        RES   6,(0181h)
+         000085FD: 1C 2D87           CALL  0872Dh
+         00008600: 0E                RET   
+
+      ; if (msg[4] == 0x0B)
+      00008601: C1 9E01 3F 0B     CP    (019Eh),00Bh
+      00008606: 6E 4E             JR    NE/NZ,0008656h
+
+         ; if (msg[5] == 0x00) return;
+         00008608: C1 9F01 3F 00     CP    (019Fh),000h
+         0000860D: 6E 85             JR    NE/NZ,0008594h
+
+         0000860F: F1 8101 B4        RES   4,(0181h)
+
+         ; if ((01A8h) == 0xFF)
+         00008613: C1 A801 3F FF     CP    (01A8h),0FFh
+         00008618: 6E 1B             JR    NE/NZ,0008635h
+
+            0000861A: 20 19             LD    W,019h
+            0000861C: 42 8D120000       LD    XDE,00000128Dh
+            00008621: B2 00 00          LD    (XDE),000h
+            00008624: EA C8 0A000000    ADD   XDE,00000000Ah
+            0000862A: C8 1C F4          DJNZ  W,0008621h
+            0000862D: F1 8101 B6        RES   6,(0181h)
+            00008631: 1C 2D87           CALL  0872Dh
+            00008634: 0E                RET   
+
+         00008635: C1 A801 25        LD    E,(01A8h)
+         00008639: CD 69             DEC   1,E
+         0000863B: CD CF 19          CP    E,019h
+
+         ; if (overflow?) return;
+         0000863E: B0 FF             RET   NC/UGE
+
+         00008640: CD 08 0A          MUL   E,00Ah
+         00008643: EA 12             EXTZ  XDE
+         00008645: EA C8 8D120000    ADD   XDE,00000128Dh
+         0000864B: B2 00 00          LD    (XDE),000h
+         0000864E: F1 8101 B6        RES   6,(0181h)
+         00008652: 1C 2D87           CALL  0872Dh
+         00008655: 0E                RET   
+
+      ; else // (msg[4] != 0x0B)
+
+         ; if (msg[4] == 0x01)
+         00008656: C1 9E01 3F 01     CP    (019Eh),001h
+         0000865B: 6E 46             JR    NE/NZ,00086A3h
+
+            ; if (msg[5] != 0x00) return;
+            0000865D: C1 9F01 3F 00     CP    (019Fh),000h
+            00008662: 7E 2FFF           JRL   NE/NZ,0008594h
+
+            ; if ((01A8h) == 0x00)
+            00008665: C1 A801 3F 00     CP    (01A8h),000h
+            0000866A: 6E 0C             JR    NE/NZ,0008678h
+
+               0000866C: F1 8101 BD        SET   5,(0181h)
+               00008670: F1 8101 B6        RES   6,(0181h)
+               00008674: 1C 2D87           CALL  0872Dh
+               00008677: 0E                RET   
+
+            ; if ((01A8h) == 0x01)
+            00008678: C1 A801 3F 01     CP    (01A8h),001h
+            0000867D: 6E 0C             JR    NE/NZ,000868Bh
+
+               0000867F: F1 8101 B8        SET   0,(0181h)
+               00008683: F1 8101 B6        RES   6,(0181h)
+               00008687: 1C 2D87           CALL  0872Dh
+               0000868A: 0E                RET   
+
+            ; if ((01A8h) != 0x02) return;
+            0000868B: C1 A801 3F 02     CP    (01A8h),002h
+            00008690: B0 FE             RET   NE/NZ
+
+            00008692: F1 8101 B4        RES   4,(0181h)
+            00008696: F1 8101 BE        SET   6,(0181h)
+            0000869A: F1 8913 00 00     LD    (1389h),000h
+            0000869F: 1C 2D87           CALL  0872Dh
+            000086A2: 0E                RET   
+
+         ; else // (msg[4] != 0x01)
+
+            ; if (msg[4] == 0x02)
+            000086A3: C1 9E01 3F 02     CP    (019Eh),002h
+            000086A8: 6E 40             JR    NE/NZ,00086EAh
+
+               ; if (msg[5] != 0x00)
+               000086AA: C1 9F01 3F 00     CP    (019Fh),000h
+               000086AF: 6E 31             JR    NE/NZ,00086E2h
+
+                  000086B1: F1 8101 B4        RES   4,(0181h)
+                  000086B5: F1 8713 00 00     LD    (1387h),000h
+                  000086BA: C1 A801 25        LD    E,(01A8h)
+                  000086BE: CD 69             DEC   1,E
+                  000086C0: F1 8813 45        LD    (1388h),E
+                  000086C4: DA 12             EXTZ  DE
+                  000086C6: CD 08 0A          MUL   E,00Ah
+                  000086C9: EA 12             EXTZ  XDE
+                  000086CB: EA C8 8D120000    ADD   XDE,00000128Dh
+                  000086D1: D9 AE             LD    BC,006h
+                  000086D3: 43 A8010000       LD    XhL,0000001A8h
+                  000086D8: 83 11             LDIR  [(XDE+),(XhL+)]
+                  000086DA: F1 8101 B6        RES   6,(0181h)
+                  000086DE: 1C 2D87           CALL  0872Dh
+                  000086E1: 0E                RET   
+
+               ; else // (msg[5] == 0x00)
+
+                  000086E2: F1 8101 B6        RES   6,(0181h)
+                  000086E6: 1C 2D87           CALL  0872Dh
+                  000086E9: 0E                RET   
+            
+            ; else // (msg[4] != 0x02)
+
+               ; if (msg[4] == 0x09)
+               000086EA: C1 9E01 3F 09     CP    (019Eh),009h
+               000086EF: 6E 14             JR    NE/NZ,0008705h
+
+                  ; if (msg[5] != 0x00) return;
+                  000086F1: C1 9F01 3F 00     CP    (019Fh),000h
+                  000086F6: 7E 9BFE           JRL   NE/NZ,0008594h
+
+                  000086F9: F1 8101 BF        SET   7,(0181h)
+                  000086FD: F1 8101 B6        RES   6,(0181h)
+                  00008701: 1C 2D87           CALL  0872Dh
+                  00008704: 0E                RET   
+
+               ; else // (msg[4] != 0x09)
+
+                  ; if (msg[4] != 0x20) return;
+                  00008705: C1 9E01 3F 20     CP    (019Eh),020h
+                  0000870A: 7E 87FE           JRL   NE/NZ,0008594h
+
+                  ; if (msg[5] != 0x00) return;
+                  0000870D: C1 9F01 3F 00     CP    (019Fh),000h
+                  00008712: 7E 7FFE           JRL   NE/NZ,0008594h
+
+                  00008715: F1 8101 B6        RES   6,(0181h)
+                  00008719: 1C 2D87           CALL  0872Dh
+                  0000871C: 0E                RET   
+
 0000871D: 29                PUSH  BC
 0000871E: 31 A001           LD    BC,001A0h
 00008721: D9 1C FD          DJNZ  BC,0008721h
 00008724: 49                POP   BC
 00008725: 0E                RET   
+
 00008726: 1C 1D87           CALL  0871Dh
 00008729: C9 1C FA          DJNZ  A,0008726h
 0000872C: 0E                RET   
@@ -444,363 +554,419 @@ Loaded 65536 (10000h) bytes. Extra space is 0 bytes.
 00008768: C9 24 04          STCF  004h,A
 0000876B: F5 E8 41          LD    (XDE+),A
 0000876E: F5 E8 00 06       LD    (XDE+),006h
-00008772: F1 8401 CA        BIT   2,(0184h)
-00008776: 66 08             JR    EQ/Z,0008780h
-00008778: BA FF 00 15       LD    (XDE+FFFFFFFFh),015h
-0000877C: F1 8401 B2        RES   2,(0184h)
-00008780: 20 04             LD    W,004h
-00008782: F5 E8 00 00       LD    (XDE+),000h
-00008786: C8 1C F9          DJNZ  W,0008782h
-00008789: 1C 1D87           CALL  0871Dh
-0000878C: F0 19 B2          RES   2,(19h)
-0000878F: C1 8001 3C 80     AND   (0180h),080h
-00008794: FC                SWI   4
-00008795: 0E                RET   
-00008796: 21 03             LD    A,003h
-00008798: 1C 2687           CALL  08726h
-0000879B: 42 9A010000       LD    XDE,00000019Ah
-000087A0: F5 E8 00 78       LD    (XDE+),078h
-000087A4: F5 E8 00 80       LD    (XDE+),080h
-000087A8: F5 E8 00 00       LD    (XDE+),000h
-000087AC: F5 E8 00 20       LD    (XDE+),020h
-000087B0: F5 E8 00 04       LD    (XDE+),004h
-000087B4: 20 08             LD    W,008h
-000087B6: F5 E8 00 00       LD    (XDE+),000h
-000087BA: C8 1C F9          DJNZ  W,00087B6h
-000087BD: F5 E8 00 16       LD    (XDE+),016h
-000087C1: C0 13 21          LD    A,(13h)
-000087C4: C9 CC 0F          AND   A,00Fh
-000087C7: C0 18 20          LD    W,(18h)
-000087CA: C8 23 00          LDCF  000h,W
-000087CD: C9 24 04          STCF  004h,A
-000087D0: C9 31 05          SET   005h,A
-000087D3: F5 E8 41          LD    (XDE+),A
-000087D6: F5 E8 00 FF       LD    (XDE+),0FFh
-000087DA: F5 E8 00 01       LD    (XDE+),001h
-000087DE: F5 E8148E 01      LD    (XDE+),(018Eh)
-000087E3: 8A FF 61          INC   1,(XDE+FFFFFFFFh)
-000087E6: F5 E8148F 01      LD    (XDE+),(018Fh)
-000087EB: 8A FF 61          INC   1,(XDE+FFFFFFFFh)
-000087EE: F5 E8 00 08       LD    (XDE+),008h
-000087F2: 1C 1D87           CALL  0871Dh
-000087F5: F0 19 B2          RES   2,(19h)
-000087F8: C1 8001 3C 80     AND   (0180h),080h
-000087FD: FC                SWI   4
-000087FE: F1 8001 CA        BIT   2,(0180h)
-00008802: 66 FA             JR    EQ/Z,00087FEh
-00008804: 21 03             LD    A,003h
-00008806: 1C 2687           CALL  08726h
-00008809: 42 9A010000       LD    XDE,00000019Ah
-0000880E: F5 E8 00 78       LD    (XDE+),078h
-00008812: F5 E8 00 80       LD    (XDE+),080h
-00008816: F5 E8 00 80       LD    (XDE+),080h
-0000881A: F5 E8 00 10       LD    (XDE+),010h
-0000881E: F5 E8 00 00       LD    (XDE+),000h
-00008822: F5 E8 00 FF       LD    (XDE+),0FFh
-00008826: F5 E8 00 19       LD    (XDE+),019h
-0000882A: 20 0D             LD    W,00Dh
-0000882C: F5 E8 00 00       LD    (XDE+),000h
-00008830: C8 1C F9          DJNZ  W,000882Ch
-00008833: 1C 1D87           CALL  0871Dh
-00008836: F0 19 B2          RES   2,(19h)
-00008839: C1 8001 3C 80     AND   (0180h),080h
-0000883E: FC                SWI   4
-0000883F: 0E                RET   
-00008840: 17 03             LDF   3
-00008842: F1 8B01 00 1D     LD    (018Bh),01Dh
-00008847: F0 0D CB          BIT   3,(0Dh)
-0000884A: 66 05             JR    EQ/Z,0008851h
-0000884C: F1 8B01 00 2B     LD    (018Bh),02Bh
-00008851: C0 50 21          LD    A,(50h)
-00008854: F1 8001 CD        BIT   5,(0180h)
-00008858: 6E 1C             JR    NE/NZ,0008876h
-0000885A: F1 8001 B6        RES   6,(0180h)
-0000885E: C9 CF 78          CP    A,078h
-00008861: 6E 35             JR    NE/NZ,0008898h
-00008863: 42 9A010000       LD    XDE,00000019Ah
-00008868: F5 E8 41          LD    (XDE+),A
-0000886B: C7 EB 99          LD    QD,A
-0000886E: 22 14             LD    B,014h
-00008870: F1 8001 BD        SET   5,(0180h)
-00008874: 68 22             JR    0008898h
-00008876: F5 E8 41          LD    (XDE+),A
-00008879: CA 69             DEC   1,B
-0000887B: CA D8             CP    B,000h
-0000887D: 66 08             JR    EQ/Z,0008887h
-0000887F: C7 EB 81          ADD   A,QD
-00008882: C7 EB 99          LD    QD,A
-00008885: 68 11             JR    0008898h
-00008887: F1 8001 B5        RES   5,(0180h)
-0000888B: C7 EB 81          ADD   A,QD
-0000888E: 66 04             JR    EQ/Z,0008894h
-00008890: F1 8401 BA        SET   2,(0184h)
-00008894: F1 8001 BE        SET   6,(0180h)
-00008898: 07                RETI  
-00008899: F1 8001 B8        SET   0,(0180h)
-0000889D: F1 8001 CC        BIT   4,(0180h)
-000088A1: 6E 45             JR    NE/NZ,00088E8h
-000088A3: F1 8001 CD        BIT   5,(0180h)
-000088A7: 6E 17             JR    NE/NZ,00088C0h
-000088A9: 42 9A010000       LD    XDE,00000019Ah
-000088AE: C0 50 22          LD    B,(50h)
-000088B1: F5 E8 42          LD    (XDE+),B
-000088B4: C7 EB 9A          LD    QD,B
-000088B7: CA D8             CP    B,000h
-000088B9: 66 04             JR    EQ/Z,00088BFh
-000088BB: F1 8001 BD        SET   5,(0180h)
-000088BF: 07                RETI  
-000088C0: CA D8             CP    B,000h
-000088C2: C0 50 21          LD    A,(50h)
-000088C5: 66 0D             JR    EQ/Z,00088D4h
-000088C7: F5 E8 41          LD    (XDE+),A
-000088CA: C7 EB 81          ADD   A,QD
-000088CD: C7 EB 99          LD    QD,A
-000088D0: CA 69             DEC   1,B
-000088D2: 68 EB             JR    00088BFh
-000088D4: F1 8001 B5        RES   5,(0180h)
-000088D8: C7 EB 81          ADD   A,QD
-000088DB: 66 05             JR    EQ/Z,00088E2h
-000088DD: 08 50 52          LD    (50h),052h
-000088E0: 68 DD             JR    00088BFh
-000088E2: F1 8001 BE        SET   6,(0180h)
-000088E6: 68 D7             JR    00088BFh
-000088E8: F1 8001 B4        RES   4,(0180h)
-000088EC: C0 50 21          LD    A,(50h)
-000088EF: C9 CF 4F          CP    A,04Fh
-000088F2: 6E 06             JR    NE/NZ,00088FAh
-000088F4: F1 8001 BA        SET   2,(0180h)
-000088F8: 68 C5             JR    00088BFh
-000088FA: C9 CF 52          CP    A,052h
-000088FD: 6E A4             JR    NE/NZ,00088A3h
-000088FF: F0 19 B2          RES   2,(19h)
-00008902: F1 8001 B0        RES   0,(0180h)
-00008906: F1 8001 B1        RES   1,(0180h)
-0000890A: 78 83F8           JRL   0008190h
-0000890D: 17 03             LDF   3
-0000890F: F1 8001 C8        BIT   0,(0180h)
-00008913: 6E 44             JR    NE/NZ,0008959h
-00008915: F1 8001 C9        BIT   1,(0180h)
-00008919: 6E 26             JR    NE/NZ,0008941h
-0000891B: 42 9A010000       LD    XDE,00000019Ah
-00008920: 22 14             LD    B,014h
-00008922: C7 EB             LD    QD,000h
-00008925: F1 8001 B9        SET   1,(0180h)
-00008929: F1 8001 B0        RES   0,(0180h)
-0000892D: F1 8001 B2        RES   2,(0180h)
-00008931: C5 E8 21          LD    A,(XDE+)
-00008934: F0 50 41          LD    (50h),A
-00008937: C7 EB 81          ADD   A,QD
-0000893A: C7 EB 99          LD    QD,A
-0000893D: CA 69             DEC   1,B
-0000893F: 68 23             JR    0008964h
-00008941: CA D8             CP    B,000h
-00008943: 6E EC             JR    NE/NZ,0008931h
-00008945: F1 8001 B1        RES   1,(0180h)
-00008949: F1 8001 B8        SET   0,(0180h)
-0000894D: C7 EB 89          LD    A,QD
-00008950: C9 06             CPL   A
-00008952: C9 61             INC   1,A
-00008954: F0 50 41          LD    (50h),A
-00008957: 68 0B             JR    0008964h
-00008959: F1 8001 B0        RES   0,(0180h)
-0000895D: F1 8001 BA        SET   2,(0180h)
-00008961: F0 19 BA          SET   2,(19h)
-00008964: 07                RETI  
-00008965: F1 8001 C8        BIT   0,(0180h)
-00008969: 6E 3E             JR    NE/NZ,00089A9h
-0000896B: F1 8001 C9        BIT   1,(0180h)
-0000896F: 6E 19             JR    NE/NZ,000898Ah
-00008971: F1 8001 B9        SET   1,(0180h)
-00008975: 42 9A010000       LD    XDE,00000019Ah
-0000897A: 82 22             LD    B,(XDE)
-0000897C: C5 E8 21          LD    A,(XDE+)
-0000897F: F0 50 41          LD    (50h),A
-00008982: C7 EB 81          ADD   A,QD
-00008985: C7 EB 99          LD    QD,A
-00008988: 68 1E             JR    00089A8h
-0000898A: CA D8             CP    B,000h
-0000898C: 66 04             JR    EQ/Z,0008992h
-0000898E: CA 69             DEC   1,B
-00008990: 68 EA             JR    000897Ch
-00008992: F1 8001 B1        RES   1,(0180h)
-00008996: F1 8001 B8        SET   0,(0180h)
-0000899A: F1 8001 BC        SET   4,(0180h)
-0000899E: C7 EB 89          LD    A,QD
-000089A1: C9 06             CPL   A
-000089A3: C9 61             INC   1,A
-000089A5: F0 50 41          LD    (50h),A
-000089A8: 07                RETI  
-000089A9: F1 8001 BB        SET   3,(0180h)
-000089AD: F0 19 BA          SET   2,(19h)
-000089B0: 68 F6             JR    00089A8h
-000089B2: 17 02             LDF   2
-000089B4: 08 07 FC          LD    (07h),0FCh
-000089B7: F1 8301 CA        BIT   2,(0183h)
-000089BB: 6E 1A             JR    NE/NZ,00089D7h
-000089BD: C1 8012 21        LD    A,(1280h)
-000089C1: C9 EC 02          SLA   002h,A
-000089C4: 23 03             LD    C,003h
-000089C6: CB 1C FD          DJNZ  C,00089C6h
-000089C9: F0 07 B7          RES   7,(07h)
-000089CC: 23 03             LD    C,003h
-000089CE: CB 1C FD          DJNZ  C,00089CEh
-000089D1: C9 31 07          SET   007h,A
-000089D4: F0 07 41          LD    (07h),A
-000089D7: C1 8012 61        INC   1,(1280h)
-000089DB: F0 0D CB          BIT   3,(0Dh)
-000089DE: 66 4F             JR    EQ/Z,0008A2Fh
-000089E0: 08 22 42          LD    (22h),042h
-000089E3: C1 8012 3F 1C     CP    (1280h),01Ch
-000089E8: 67 09             JR    C/ULT,00089F3h
-000089EA: F1 8012 00 00     LD    (1280h),000h
-000089EF: C1 8D01 61        INC   1,(018Dh)
-000089F3: 1C 968B           CALL  08B96h
-000089F6: C1 8B01 3F 00     CP    (018Bh),000h
-000089FB: 66 0A             JR    EQ/Z,0008A07h
-000089FD: C1 8B01 69        DEC   1,(018Bh)
-00008A01: 6E 04             JR    NE/NZ,0008A07h
-00008A03: F1 8001 B5        RES   5,(0180h)
-00008A07: C1 8A01 69        DEC   1,(018Ah)
-00008A0B: 6E 21             JR    NE/NZ,0008A2Eh
-00008A0D: F1 8A01 00 77     LD    (018Ah),077h
-00008A12: F0 0D CB          BIT   3,(0Dh)
-00008A15: 66 05             JR    EQ/Z,0008A1Ch
-00008A17: F1 8A01 00 AF     LD    (018Ah),0AFh
-00008A1C: F1 8201 C8        BIT   0,(0182h)
-00008A20: 6E 0C             JR    NE/NZ,0008A2Eh
-00008A22: D1 8801 3F 0000   CPW   (0188h),00000h
-00008A28: 66 04             JR    EQ/Z,0008A2Eh
-00008A2A: D1 8801 69        DECW  1,(0188h)
-00008A2E: 07                RETI  
-00008A2F: 08 22 61          LD    (22h),061h
-00008A32: C1 8012 3F 13     CP    (1280h),013h
-00008A37: 67 BA             JR    C/ULT,00089F3h
-00008A39: 68 AF             JR    00089EAh
-00008A3B: 17 01             LDF   1
-00008A3D: F1 8201 C9        BIT   1,(0182h)
-00008A41: 6E 0B             JR    NE/NZ,0008A4Eh
-00008A43: F0 0D CA          BIT   2,(0Dh)
-00008A46: 66 27             JR    EQ/Z,0008A6Fh
-00008A48: F1 8201 BC        SET   4,(0182h)
-00008A4C: 68 21             JR    0008A6Fh
-00008A4E: F1 8201 B4        RES   4,(0182h)
-00008A52: F1 8201 B1        RES   1,(0182h)
-00008A56: C1 8B12 21        LD    A,(128Bh)
-00008A5A: F1 8112 41        LD    (1281h),A
-00008A5E: C1 8C12 F9        CP    (128Ch),A
-00008A62: 77 1D01           JRL   C/ULT,0008B82h
-00008A65: F1 82121489 12    LD    (1282h),(1289h)
-00008A6B: F1 8201 B2        RES   2,(0182h)
-00008A6F: F0 20 B1          RES   1,(20h)
-00008A72: F0 18 B2          RES   2,(18h)
-00008A75: F1 8201 CA        BIT   2,(0182h)
-00008A79: 7E 0601           JRL   NE/NZ,0008B82h
-00008A7C: C1 8112 21        LD    A,(1281h)
-00008A80: D8 12             EXTZ  WA
-00008A82: D8 EC 02          SLA   002h,WA
-00008A85: E8 12             EXTZ  XWA
-00008A87: 43 80040000       LD    XhL,000000480h
-00008A8C: 42 00080000       LD    XDE,000000800h
-00008A91: E8 83             ADD   XhL,XWA
-00008A93: E8 82             ADD   XDE,XWA
-00008A95: F1 8201 CB        BIT   3,(0182h)
-00008A99: 7E A700           JRL   NE/NZ,0008B43h
-00008A9C: A3 20             LD    XWA,(XhL)
-00008A9E: A2 21             LD    XBC,(XDE)
-00008AA0: E8 D1             XOR   XBC,XWA
-00008AA2: 76 CA00           JRL   EQ/Z,0008B6Fh
-00008AA5: D9 D8             CP    BC,000h
-00008AA7: 76 AA00           JRL   EQ/Z,0008B54h
-00008AAA: D9 0E             BS1F  A,BC
-00008AAC: F1 8212 41        LD    (1282h),A
-00008AB0: C1 8912 F1        CP    A,(1289h)
-00008AB4: 77 AC00           JRL   C/ULT,0008B63h
-00008AB7: C1 8A12 F9        CP    (128Ah),A
-00008ABB: 77 A500           JRL   C/ULT,0008B63h
-00008ABE: 92 21             LD    BC,(XDE)
-00008AC0: D9 2B             LDCF  A,BC
-00008AC2: 93 21             LD    BC,(XhL)
-00008AC4: D9 2C             STCF  A,BC
-00008AC6: F1 8301 A0        STCF  0,(0183h)
-00008ACA: 12                CCF   
-00008ACB: B3 51             LD    (XhL),BC
-00008ACD: C1 8112 21        LD    A,(1281h)
-00008AD1: D8 12             EXTZ  WA
-00008AD3: C9 0A 1C          DIV   A,01Ch
-00008AD6: C8 24 06          STCF  006h,W
-00008AD9: C8 E8 03          RLC   003h,W
-00008ADC: F0 18 40          LD    (18h),W
-00008ADF: C9 23 00          LDCF  000h,A
-00008AE2: F0 19 A3          STCF  3,(19h)
-00008AE5: C9 23 01          LDCF  001h,A
-00008AE8: F0 19 A4          STCF  4,(19h)
-00008AEB: C9 23 02          LDCF  002h,A
-00008AEE: F0 19 A5          STCF  5,(19h)
-00008AF1: C0 12 21          LD    A,(12h)
-00008AF4: C9 CC E0          AND   A,0E0h
-00008AF7: C1 8212 E1        OR    A,(1282h)
-00008AFB: F0 12 41          LD    (12h),A
-00008AFE: F0 18 BA          SET   2,(18h)
-00008B01: C1 8501 21        LD    A,(0185h)
-00008B05: F0 23 41          LD    (23h),A
-00008B08: 08 73 1B          LD    (73h),01Bh
-00008B0B: F0 20 B9          SET   1,(20h)
-00008B0E: F1 8301 C9        BIT   1,(0183h)
-00008B12: F1 B88B E6        CALL  EQ/Z,(8BB8h)
-00008B16: F1 8201 CB        BIT   3,(0182h)
-00008B1A: 66 26             JR    EQ/Z,0008B42h
-00008B1C: C1 8212 61        INC   1,(1282h)
-00008B20: C1 8212 21        LD    A,(1282h)
-00008B24: C1 8A12 F9        CP    (128Ah),A
-00008B28: 6F 18             JR    NC/UGE,0008B42h
-00008B2A: F1 82121489 12    LD    (1282h),(1289h)
-00008B30: C1 8112 61        INC   1,(1281h)
-00008B34: C1 8112 21        LD    A,(1281h)
-00008B38: C1 8C12 F9        CP    (128Ch),A
-00008B3C: 6F 04             JR    NC/UGE,0008B42h
-00008B3E: F1 8201 BA        SET   2,(0182h)
-00008B42: 07                RETI  
-00008B43: C1 8212 21        LD    A,(1282h)
-00008B47: C9 CF 10          CP    A,010h
-00008B4A: 77 5FFF           JRL   C/ULT,0008AACh
-00008B4D: EB 62             INC   2,XhL
-00008B4F: EA 62             INC   2,XDE
-00008B51: 78 58FF           JRL   0008AACh
-00008B54: D7 E6 89          LD    BC,QBC
-00008B57: EB 62             INC   2,XhL
-00008B59: EA 62             INC   2,XDE
-00008B5B: D9 0E             BS1F  A,BC
-00008B5D: C9 C8 10          ADD   A,010h
-00008B60: 78 49FF           JRL   0008AACh
-00008B63: 92 21             LD    BC,(XDE)
-00008B65: D9 2B             LDCF  A,BC
-00008B67: 12                CCF   
-00008B68: D9 2C             STCF  A,BC
-00008B6A: B2 51             LD    (XDE),BC
-00008B6C: 78 00FF           JRL   0008A6Fh
-00008B6F: C1 8112 61        INC   1,(1281h)
-00008B73: C1 8112 21        LD    A,(1281h)
-00008B77: C1 8C12 F9        CP    (128Ch),A
-00008B7B: 7F F1FE           JRL   NC/UGE,0008A6Fh
-00008B7E: F1 8201 BA        SET   2,(0182h)
-00008B82: F0 20 B1          RES   1,(20h)
-00008B85: F1 8201 B0        RES   0,(0182h)
-00008B89: F1 8201 B3        RES   3,(0182h)
-00008B8D: F1 8201 9C        LDCF  4,(0182h)
-00008B91: F1 8401 A6        STCF  6,(0184h)
-00008B95: 07                RETI  
-00008B96: C1 8012 27        LD    L,(1280h)
-00008B9A: CF 08 1C          MUL   L,01Ch
-00008B9D: EB 12             EXTZ  XhL
-00008B9F: EB C8 1C0F0000    ADD   XhL,000000F1Ch
-00008BA5: 23 1C             LD    C,01Ch
-00008BA7: 06 07             DI    
-00008BA9: F0 06 B7          RES   7,(06h)
-00008BAC: C4 EC 21          LD    A,(-XhL)
-00008BAF: CB 1C FA          DJNZ  C,0008BACh
-00008BB2: F0 06 BF          SET   7,(06h)
-00008BB5: 06 00             EI    0
-00008BB7: 0E                RET   
+
+   ; if (msg_recv_flag)
+   00008772: F1 8401 CA        BIT   2,(0184h)
+   00008776: 66 08             JR    EQ/Z,0008780h
+
+      00008778: BA FF 00 15       LD    (XDE+FFFFFFFFh),015h
+      0000877C: F1 8401 B2        RES   2,(0184h)
+
+   00008780: 20 04             LD    W,004h
+   00008782: F5 E8 00 00       LD    (XDE+),000h
+   00008786: C8 1C F9          DJNZ  W,0008782h
+   00008789: 1C 1D87           CALL  0871Dh
+   0000878C: F0 19 B2          RES   2,(19h)
+   0000878F: C1 8001 3C 80     AND   (serial_status? 0180h),080h
+   00008794: FC                SWI   4
+   00008795: 0E                RET   
+
+func_8796:
+   00008796: 21 03             LD    A,003h
+   00008798: 1C 2687           CALL  08726h
+   0000879B: 42 9A010000       LD    XDE,00000019Ah
+   000087A0: F5 E8 00 78       LD    (XDE+),078h
+   000087A4: F5 E8 00 80       LD    (XDE+),080h
+   000087A8: F5 E8 00 00       LD    (XDE+),000h
+   000087AC: F5 E8 00 20       LD    (XDE+),020h
+   000087B0: F5 E8 00 04       LD    (XDE+),004h
+   000087B4: 20 08             LD    W,008h
+   000087B6: F5 E8 00 00       LD    (XDE+),000h
+   000087BA: C8 1C F9          DJNZ  W,00087B6h
+   000087BD: F5 E8 00 16       LD    (XDE+),016h
+   000087C1: C0 13 21          LD    A,(13h)
+   000087C4: C9 CC 0F          AND   A,00Fh
+   000087C7: C0 18 20          LD    W,(18h)
+   000087CA: C8 23 00          LDCF  000h,W
+   000087CD: C9 24 04          STCF  004h,A
+   000087D0: C9 31 05          SET   005h,A
+   000087D3: F5 E8 41          LD    (XDE+),A
+   000087D6: F5 E8 00 FF       LD    (XDE+),0FFh
+   000087DA: F5 E8 00 01       LD    (XDE+),001h
+   000087DE: F5 E8148E 01      LD    (XDE+),(018Eh)
+   000087E3: 8A FF 61          INC   1,(XDE+FFFFFFFFh)
+   000087E6: F5 E8148F 01      LD    (XDE+),(018Fh)
+   000087EB: 8A FF 61          INC   1,(XDE+FFFFFFFFh)
+   000087EE: F5 E8 00 08       LD    (XDE+),008h
+   000087F2: 1C 1D87           CALL  0871Dh
+   000087F5: F0 19 B2          RES   2,(19h)
+   000087F8: C1 8001 3C 80     AND   (serial_status? 0180h),080h
+   000087FD: FC                SWI   4
+   000087FE: F1 8001 CA        BIT   2,(serial_status? 0180h)
+   00008802: 66 FA             JR    EQ/Z,00087FEh
+   00008804: 21 03             LD    A,003h
+   00008806: 1C 2687           CALL  08726h
+   00008809: 42 9A010000       LD    XDE,00000019Ah
+   0000880E: F5 E8 00 78       LD    (XDE+),078h
+   00008812: F5 E8 00 80       LD    (XDE+),080h
+   00008816: F5 E8 00 80       LD    (XDE+),080h
+   0000881A: F5 E8 00 10       LD    (XDE+),010h
+   0000881E: F5 E8 00 00       LD    (XDE+),000h
+   00008822: F5 E8 00 FF       LD    (XDE+),0FFh
+   00008826: F5 E8 00 19       LD    (XDE+),019h
+   0000882A: 20 0D             LD    W,00Dh
+   0000882C: F5 E8 00 00       LD    (XDE+),000h
+   00008830: C8 1C F9          DJNZ  W,000882Ch
+   00008833: 1C 1D87           CALL  0871Dh
+   00008836: F0 19 B2          RES   2,(19h)
+   00008839: C1 8001 3C 80     AND   (serial_status? 0180h),080h
+   0000883E: FC                SWI   4
+   0000883F: 0E                RET   
+
+func_ptr_8840:
+
+   ; Use register bank 3
+   00008840: 17 03             LDF   3
+   00008842: F1 8B01 00 1D     LD    (018Bh),01Dh
+   00008847: F0 0D CB          BIT   3,(0Dh)
+   0000884A: 66 05             JR    EQ/Z,0008851h
+   0000884C: F1 8B01 00 2B     LD    (018Bh),02Bh
+
+   ; A = SCOBUF
+   00008851: C0 50 21          LD    A,(SC0BUF 50h)
+
+   ; if (!serial_status.5)
+   00008854: F1 8001 CD        BIT   5,(serial_status? 0180h)
+   00008858: 6E 1C             JR    NE/NZ,0008876h
+
+      ; serial_status.6 = false
+      0000885A: F1 8001 B6        RES   6,(serial_status? 0180h)
+
+      ; if (SC0BUF != 0x78) reti;
+      0000885E: C9 CF 78          CP    A,078h
+      00008861: 6E 35             JR    NE/NZ,0008898h
+
+      ; XDE = 19Ah (message_buffer?)
+      00008863: 42 9A010000       LD    XDE,00000019Ah
+
+      ; Store received byte
+      00008868: F5 E8 41          LD    (XDE+),A
+
+      ; ???
+      0000886B: C7 EB 99          LD    QD,A
+
+      ; B = 20 // Remaining bytes?
+      0000886E: 22 14             LD    B,014h
+
+      ; serial_status.5 = true
+      00008870: F1 8001 BD        SET   5,(serial_status? 0180h)
+
+      ; reti
+      00008874: 68 22             JR    0008898h
+
+   ; Store message byte to buffer, decrement expected len
+   00008876: F5 E8 41          LD    (XDE+),A
+   00008879: CA 69             DEC   1,B
+
+   ; if (B != 0) // message in progress
+   0000887B: CA D8             CP    B,000h
+   0000887D: 66 08             JR    EQ/Z,0008887h
+
+      ; QD += A // checksum?
+      0000887F: C7 EB 81          ADD   A,QD
+      00008882: C7 EB 99          LD    QD,A
+
+      ; reti
+      00008885: 68 11             JR    0008898h
+
+   ; serial_status.5 = false
+   00008887: F1 8001 B5        RES   5,(serial_status? 0180h)
+   0000888B: C7 EB 81          ADD   A,QD
+
+   ; if (QD == 0) // checksum OK
+   0000888E: 66 04             JR    EQ/Z,0008894h
+
+      00008890: F1 8401 BA        SET   2,(0184h)
+      00008894: F1 8001 BE        SET   6,(serial_status? 0180h)
+
+   ; Exit interrupt
+   00008898: 07                RETI  
+
+dead?_8899:
+   00008899: F1 8001 B8        SET   0,(serial_status? 0180h)
+   0000889D: F1 8001 CC        BIT   4,(serial_status? 0180h)
+   000088A1: 6E 45             JR    NE/NZ,00088E8h
+   000088A3: F1 8001 CD        BIT   5,(serial_status? 0180h)
+   000088A7: 6E 17             JR    NE/NZ,00088C0h
+   000088A9: 42 9A010000       LD    XDE,00000019Ah
+   000088AE: C0 50 22          LD    B,(SC0BUF 50h)
+   000088B1: F5 E8 42          LD    (XDE+),B
+   000088B4: C7 EB 9A          LD    QD,B
+   000088B7: CA D8             CP    B,000h
+   000088B9: 66 04             JR    EQ/Z,00088BFh
+   000088BB: F1 8001 BD        SET   5,(serial_status? 0180h)
+   000088BF: 07                RETI  
+   000088C0: CA D8             CP    B,000h
+   000088C2: C0 50 21          LD    A,(SC0BUF 50h)
+   000088C5: 66 0D             JR    EQ/Z,00088D4h
+   000088C7: F5 E8 41          LD    (XDE+),A
+   000088CA: C7 EB 81          ADD   A,QD
+   000088CD: C7 EB 99          LD    QD,A
+   000088D0: CA 69             DEC   1,B
+   000088D2: 68 EB             JR    00088BFh
+   000088D4: F1 8001 B5        RES   5,(serial_status? 0180h)
+   000088D8: C7 EB 81          ADD   A,QD
+   000088DB: 66 05             JR    EQ/Z,00088E2h
+   000088DD: 08 50 52          LD    (SC0BUF 50h),052h
+   000088E0: 68 DD             JR    00088BFh
+   000088E2: F1 8001 BE        SET   6,(serial_status? 0180h)
+   000088E6: 68 D7             JR    00088BFh
+   000088E8: F1 8001 B4        RES   4,(serial_status? 0180h)
+   000088EC: C0 50 21          LD    A,(SC0BUF 50h)
+   000088EF: C9 CF 4F          CP    A,04Fh
+   000088F2: 6E 06             JR    NE/NZ,00088FAh
+   000088F4: F1 8001 BA        SET   2,(serial_status? 0180h)
+   000088F8: 68 C5             JR    00088BFh
+   000088FA: C9 CF 52          CP    A,052h
+   000088FD: 6E A4             JR    NE/NZ,00088A3h
+   000088FF: F0 19 B2          RES   2,(19h)
+   00008902: F1 8001 B0        RES   0,(serial_status? 0180h)
+   00008906: F1 8001 B1        RES   1,(serial_status? 0180h)
+
+   ; goto vector_INTTX0
+   0000890A: 78 83F8           JRL   0008190h
+
+func_ptr_0890D:
+   0000890D: 17 03             LDF   3
+   0000890F: F1 8001 C8        BIT   0,(serial_status? 0180h)
+   00008913: 6E 44             JR    NE/NZ,0008959h
+   00008915: F1 8001 C9        BIT   1,(serial_status? 0180h)
+   00008919: 6E 26             JR    NE/NZ,0008941h
+   0000891B: 42 9A010000       LD    XDE,00000019Ah
+   00008920: 22 14             LD    B,014h
+   00008922: C7 EB             LD    QD,000h
+   00008925: F1 8001 B9        SET   1,(serial_status? 0180h)
+   00008929: F1 8001 B0        RES   0,(serial_status? 0180h)
+   0000892D: F1 8001 B2        RES   2,(serial_status? 0180h)
+   00008931: C5 E8 21          LD    A,(XDE+)
+   00008934: F0 50 41          LD    (SC0BUF 50h),A
+   00008937: C7 EB 81          ADD   A,QD
+   0000893A: C7 EB 99          LD    QD,A
+   0000893D: CA 69             DEC   1,B
+   0000893F: 68 23             JR    0008964h
+   00008941: CA D8             CP    B,000h
+   00008943: 6E EC             JR    NE/NZ,0008931h
+   00008945: F1 8001 B1        RES   1,(serial_status? 0180h)
+   00008949: F1 8001 B8        SET   0,(serial_status? 0180h)
+   0000894D: C7 EB 89          LD    A,QD
+   00008950: C9 06             CPL   A
+   00008952: C9 61             INC   1,A
+   00008954: F0 50 41          LD    (SC0BUF 50h),A
+   00008957: 68 0B             JR    0008964h
+   00008959: F1 8001 B0        RES   0,(serial_status? 0180h)
+   0000895D: F1 8001 BA        SET   2,(serial_status? 0180h)
+   00008961: F0 19 BA          SET   2,(19h)
+   00008964: 07                RETI  
+
+dead?_8965:
+   00008965: F1 8001 C8        BIT   0,(serial_status? 0180h)
+   00008969: 6E 3E             JR    NE/NZ,00089A9h
+   0000896B: F1 8001 C9        BIT   1,(serial_status? 0180h)
+   0000896F: 6E 19             JR    NE/NZ,000898Ah
+   00008971: F1 8001 B9        SET   1,(serial_status? 0180h)
+   00008975: 42 9A010000       LD    XDE,00000019Ah
+   0000897A: 82 22             LD    B,(XDE)
+   0000897C: C5 E8 21          LD    A,(XDE+)
+   0000897F: F0 50 41          LD    (SC0BUF 50h),A
+   00008982: C7 EB 81          ADD   A,QD
+   00008985: C7 EB 99          LD    QD,A
+   00008988: 68 1E             JR    00089A8h
+   0000898A: CA D8             CP    B,000h
+   0000898C: 66 04             JR    EQ/Z,0008992h
+   0000898E: CA 69             DEC   1,B
+   00008990: 68 EA             JR    000897Ch
+   00008992: F1 8001 B1        RES   1,(serial_status? 0180h)
+   00008996: F1 8001 B8        SET   0,(serial_status? 0180h)
+   0000899A: F1 8001 BC        SET   4,(serial_status? 0180h)
+   0000899E: C7 EB 89          LD    A,QD
+   000089A1: C9 06             CPL   A
+   000089A3: C9 61             INC   1,A
+   000089A5: F0 50 41          LD    (SC0BUF 50h),A
+   000089A8: 07                RETI  
+   000089A9: F1 8001 BB        SET   3,(serial_status? 0180h)
+   000089AD: F0 19 BA          SET   2,(19h)
+   000089B0: 68 F6             JR    00089A8h
+   000089B2: 17 02             LDF   2
+   000089B4: 08 07 FC          LD    (07h),0FCh
+   000089B7: F1 8301 CA        BIT   2,(0183h)
+   000089BB: 6E 1A             JR    NE/NZ,00089D7h
+   000089BD: C1 8012 21        LD    A,(1280h)
+   000089C1: C9 EC 02          SLA   002h,A
+   000089C4: 23 03             LD    C,003h
+   000089C6: CB 1C FD          DJNZ  C,00089C6h
+   000089C9: F0 07 B7          RES   7,(07h)
+   000089CC: 23 03             LD    C,003h
+   000089CE: CB 1C FD          DJNZ  C,00089CEh
+   000089D1: C9 31 07          SET   007h,A
+   000089D4: F0 07 41          LD    (07h),A
+   000089D7: C1 8012 61        INC   1,(1280h)
+   000089DB: F0 0D CB          BIT   3,(0Dh)
+   000089DE: 66 4F             JR    EQ/Z,0008A2Fh
+   000089E0: 08 22 42          LD    (22h),042h
+   000089E3: C1 8012 3F 1C     CP    (1280h),01Ch
+   000089E8: 67 09             JR    C/ULT,00089F3h
+   000089EA: F1 8012 00 00     LD    (1280h),000h
+   000089EF: C1 8D01 61        INC   1,(018Dh)
+   000089F3: 1C 968B           CALL  08B96h
+   000089F6: C1 8B01 3F 00     CP    (018Bh),000h
+   000089FB: 66 0A             JR    EQ/Z,0008A07h
+   000089FD: C1 8B01 69        DEC   1,(018Bh)
+   00008A01: 6E 04             JR    NE/NZ,0008A07h
+   00008A03: F1 8001 B5        RES   5,(serial_status? 0180h)
+   00008A07: C1 8A01 69        DEC   1,(018Ah)
+   00008A0B: 6E 21             JR    NE/NZ,0008A2Eh
+   00008A0D: F1 8A01 00 77     LD    (018Ah),077h
+   00008A12: F0 0D CB          BIT   3,(0Dh)
+   00008A15: 66 05             JR    EQ/Z,0008A1Ch
+   00008A17: F1 8A01 00 AF     LD    (018Ah),0AFh
+   00008A1C: F1 8201 C8        BIT   0,(0182h)
+   00008A20: 6E 0C             JR    NE/NZ,0008A2Eh
+   00008A22: D1 8801 3F 0000   CPW   (0188h),00000h
+   00008A28: 66 04             JR    EQ/Z,0008A2Eh
+   00008A2A: D1 8801 69        DECW  1,(0188h)
+   00008A2E: 07                RETI  
+   00008A2F: 08 22 61          LD    (22h),061h
+   00008A32: C1 8012 3F 13     CP    (1280h),013h
+   00008A37: 67 BA             JR    C/ULT,00089F3h
+   00008A39: 68 AF             JR    00089EAh
+   00008A3B: 17 01             LDF   1
+   00008A3D: F1 8201 C9        BIT   1,(0182h)
+   00008A41: 6E 0B             JR    NE/NZ,0008A4Eh
+   00008A43: F0 0D CA          BIT   2,(0Dh)
+   00008A46: 66 27             JR    EQ/Z,0008A6Fh
+   00008A48: F1 8201 BC        SET   4,(0182h)
+   00008A4C: 68 21             JR    0008A6Fh
+   00008A4E: F1 8201 B4        RES   4,(0182h)
+   00008A52: F1 8201 B1        RES   1,(0182h)
+   00008A56: C1 8B12 21        LD    A,(128Bh)
+   00008A5A: F1 8112 41        LD    (1281h),A
+   00008A5E: C1 8C12 F9        CP    (128Ch),A
+   00008A62: 77 1D01           JRL   C/ULT,0008B82h
+   00008A65: F1 82121489 12    LD    (1282h),(1289h)
+   00008A6B: F1 8201 B2        RES   2,(0182h)
+   00008A6F: F0 20 B1          RES   1,(20h)
+   00008A72: F0 18 B2          RES   2,(18h)
+   00008A75: F1 8201 CA        BIT   2,(0182h)
+   00008A79: 7E 0601           JRL   NE/NZ,0008B82h
+   00008A7C: C1 8112 21        LD    A,(1281h)
+   00008A80: D8 12             EXTZ  WA
+   00008A82: D8 EC 02          SLA   002h,WA
+   00008A85: E8 12             EXTZ  XWA
+   00008A87: 43 80040000       LD    XhL,000000480h
+   00008A8C: 42 00080000       LD    XDE,000000800h
+   00008A91: E8 83             ADD   XhL,XWA
+   00008A93: E8 82             ADD   XDE,XWA
+   00008A95: F1 8201 CB        BIT   3,(0182h)
+   00008A99: 7E A700           JRL   NE/NZ,0008B43h
+   00008A9C: A3 20             LD    XWA,(XhL)
+   00008A9E: A2 21             LD    XBC,(XDE)
+   00008AA0: E8 D1             XOR   XBC,XWA
+   00008AA2: 76 CA00           JRL   EQ/Z,0008B6Fh
+   00008AA5: D9 D8             CP    BC,000h
+   00008AA7: 76 AA00           JRL   EQ/Z,0008B54h
+   00008AAA: D9 0E             BS1F  A,BC
+   00008AAC: F1 8212 41        LD    (1282h),A
+   00008AB0: C1 8912 F1        CP    A,(1289h)
+   00008AB4: 77 AC00           JRL   C/ULT,0008B63h
+   00008AB7: C1 8A12 F9        CP    (128Ah),A
+   00008ABB: 77 A500           JRL   C/ULT,0008B63h
+   00008ABE: 92 21             LD    BC,(XDE)
+   00008AC0: D9 2B             LDCF  A,BC
+   00008AC2: 93 21             LD    BC,(XhL)
+   00008AC4: D9 2C             STCF  A,BC
+   00008AC6: F1 8301 A0        STCF  0,(0183h)
+   00008ACA: 12                CCF   
+   00008ACB: B3 51             LD    (XhL),BC
+   00008ACD: C1 8112 21        LD    A,(1281h)
+   00008AD1: D8 12             EXTZ  WA
+   00008AD3: C9 0A 1C          DIV   A,01Ch
+   00008AD6: C8 24 06          STCF  006h,W
+   00008AD9: C8 E8 03          RLC   003h,W
+   00008ADC: F0 18 40          LD    (18h),W
+   00008ADF: C9 23 00          LDCF  000h,A
+   00008AE2: F0 19 A3          STCF  3,(19h)
+   00008AE5: C9 23 01          LDCF  001h,A
+   00008AE8: F0 19 A4          STCF  4,(19h)
+   00008AEB: C9 23 02          LDCF  002h,A
+   00008AEE: F0 19 A5          STCF  5,(19h)
+   00008AF1: C0 12 21          LD    A,(12h)
+   00008AF4: C9 CC E0          AND   A,0E0h
+   00008AF7: C1 8212 E1        OR    A,(1282h)
+   00008AFB: F0 12 41          LD    (12h),A
+   00008AFE: F0 18 BA          SET   2,(18h)
+   00008B01: C1 8501 21        LD    A,(0185h)
+   00008B05: F0 23 41          LD    (23h),A
+   00008B08: 08 73 1B          LD    (73h),01Bh
+   00008B0B: F0 20 B9          SET   1,(20h)
+   00008B0E: F1 8301 C9        BIT   1,(0183h)
+   00008B12: F1 B88B E6        CALL  EQ/Z,(8BB8h)
+   00008B16: F1 8201 CB        BIT   3,(0182h)
+   00008B1A: 66 26             JR    EQ/Z,0008B42h
+   00008B1C: C1 8212 61        INC   1,(1282h)
+   00008B20: C1 8212 21        LD    A,(1282h)
+   00008B24: C1 8A12 F9        CP    (128Ah),A
+   00008B28: 6F 18             JR    NC/UGE,0008B42h
+   00008B2A: F1 82121489 12    LD    (1282h),(1289h)
+   00008B30: C1 8112 61        INC   1,(1281h)
+   00008B34: C1 8112 21        LD    A,(1281h)
+   00008B38: C1 8C12 F9        CP    (128Ch),A
+   00008B3C: 6F 04             JR    NC/UGE,0008B42h
+   00008B3E: F1 8201 BA        SET   2,(0182h)
+   00008B42: 07                RETI  
+   00008B43: C1 8212 21        LD    A,(1282h)
+   00008B47: C9 CF 10          CP    A,010h
+   00008B4A: 77 5FFF           JRL   C/ULT,0008AACh
+   00008B4D: EB 62             INC   2,XhL
+   00008B4F: EA 62             INC   2,XDE
+   00008B51: 78 58FF           JRL   0008AACh
+   00008B54: D7 E6 89          LD    BC,QBC
+   00008B57: EB 62             INC   2,XhL
+   00008B59: EA 62             INC   2,XDE
+   00008B5B: D9 0E             BS1F  A,BC
+   00008B5D: C9 C8 10          ADD   A,010h
+   00008B60: 78 49FF           JRL   0008AACh
+   00008B63: 92 21             LD    BC,(XDE)
+   00008B65: D9 2B             LDCF  A,BC
+   00008B67: 12                CCF   
+   00008B68: D9 2C             STCF  A,BC
+   00008B6A: B2 51             LD    (XDE),BC
+   00008B6C: 78 00FF           JRL   0008A6Fh
+   00008B6F: C1 8112 61        INC   1,(1281h)
+   00008B73: C1 8112 21        LD    A,(1281h)
+   00008B77: C1 8C12 F9        CP    (128Ch),A
+   00008B7B: 7F F1FE           JRL   NC/UGE,0008A6Fh
+   00008B7E: F1 8201 BA        SET   2,(0182h)
+   00008B82: F0 20 B1          RES   1,(20h)
+   00008B85: F1 8201 B0        RES   0,(0182h)
+   00008B89: F1 8201 B3        RES   3,(0182h)
+   00008B8D: F1 8201 9C        LDCF  4,(0182h)
+   00008B91: F1 8401 A6        STCF  6,(0184h)
+   00008B95: 07                RETI  
+
+func_8B96:
+   00008B96: C1 8012 27        LD    L,(1280h)
+   00008B9A: CF 08 1C          MUL   L,01Ch
+   00008B9D: EB 12             EXTZ  XhL
+   00008B9F: EB C8 1C0F0000    ADD   XhL,000000F1Ch
+   00008BA5: 23 1C             LD    C,01Ch
+   00008BA7: 06 07             DI    
+   00008BA9: F0 06 B7          RES   7,(06h)
+   00008BAC: C4 EC 21          LD    A,(-XhL)
+   00008BAF: CB 1C FA          DJNZ  C,0008BACh
+   00008BB2: F0 06 BF          SET   7,(06h)
+   00008BB5: 06 00             EI    0
+   00008BB7: 0E                RET
+
 00008BB8: C1 8112 21        LD    A,(1281h)
 00008BBC: D8 12             EXTZ  WA
 00008BBE: C9 0A 1C          DIV   A,01Ch
@@ -981,3 +1147,4 @@ Loaded 65536 (10000h) bytes. Extra space is 0 bytes.
 00008DB0: EB 61             INC   1,XhL
 00008DB2: C7 E3 1C E0       DJNZ  QW,0008D96h
 00008DB6: C8 1C D2          DJNZ  W,0008D8Bh
+00008DB9: 0E                RET   
