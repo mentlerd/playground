@@ -354,7 +354,7 @@ func_08569: // message handler
          000085C0: 83 11             LDIR  [(XDE+),(XhL+)]
          000085C2: C1 8713 61        INC   1,(1387h)
          000085C6: F1 8101 B6        RES   6,(0181h)
-         000085CA: 1C 2D87           CALL  0872Dh
+         000085CA: 1C 2D87           CALL  0872Dh // VMX ACK?
          000085CD: 0E                RET  
 
    ; else // (msg[2] == 0x00) 
@@ -372,7 +372,7 @@ func_08569: // message handler
          000085E1: 6E B1             JR    NE/NZ,0008594h
 
          000085E3: F1 8101 B6        RES   6,(0181h)
-         000085E7: 1C 9687           CALL  08796h
+         000085E7: 1C 9687           CALL  08796h // VMX CMD?
          000085EA: 0E                RET   
 
       ; if (msg[4] == 0x04)
@@ -384,7 +384,7 @@ func_08569: // message handler
          000085F7: 6E 9B             JR    NE/NZ,0008594h
 
          000085F9: F1 8101 B6        RES   6,(0181h)
-         000085FD: 1C 2D87           CALL  0872Dh
+         000085FD: 1C 2D87           CALL  0872Dh // VMX ACK?
          00008600: 0E                RET   
 
       ; if (msg[4] == 0x0B)
@@ -407,7 +407,7 @@ func_08569: // message handler
             00008624: EA C8 0A000000    ADD   XDE,00000000Ah
             0000862A: C8 1C F4          DJNZ  W,0008621h
             0000862D: F1 8101 B6        RES   6,(0181h)
-            00008631: 1C 2D87           CALL  0872Dh
+            00008631: 1C 2D87           CALL  0872Dh // VMX ACK?
             00008634: 0E                RET   
 
          00008635: C1 A801 25        LD    E,(01A8h)
@@ -422,7 +422,7 @@ func_08569: // message handler
          00008645: EA C8 8D120000    ADD   XDE,00000128Dh
          0000864B: B2 00 00          LD    (XDE),000h
          0000864E: F1 8101 B6        RES   6,(0181h)
-         00008652: 1C 2D87           CALL  0872Dh
+         00008652: 1C 2D87           CALL  0872Dh // VMX ACK?
          00008655: 0E                RET   
 
       ; else // (msg[4] != 0x0B)
@@ -441,7 +441,7 @@ func_08569: // message handler
 
                0000866C: F1 8101 BD        SET   5,(0181h)
                00008670: F1 8101 B6        RES   6,(0181h)
-               00008674: 1C 2D87           CALL  0872Dh
+               00008674: 1C 2D87           CALL  0872Dh // VMX ACK?
                00008677: 0E                RET   
 
             ; if ((01A8h) == 0x01)
@@ -450,7 +450,7 @@ func_08569: // message handler
 
                0000867F: F1 8101 B8        SET   0,(0181h)
                00008683: F1 8101 B6        RES   6,(0181h)
-               00008687: 1C 2D87           CALL  0872Dh
+               00008687: 1C 2D87           CALL  0872Dh // VMX ACK?
                0000868A: 0E                RET   
 
             ; if ((01A8h) != 0x02) return;
@@ -460,7 +460,7 @@ func_08569: // message handler
             00008692: F1 8101 B4        RES   4,(0181h)
             00008696: F1 8101 BE        SET   6,(0181h)
             0000869A: F1 8913 00 00     LD    (1389h),000h
-            0000869F: 1C 2D87           CALL  0872Dh
+            0000869F: 1C 2D87           CALL  0872Dh // VMX_ACK?
             000086A2: 0E                RET   
 
          ; else // (msg[4] != 0x01)
@@ -486,13 +486,13 @@ func_08569: // message handler
                   000086D3: 43 A8010000       LD    XhL,0000001A8h
                   000086D8: 83 11             LDIR  [(XDE+),(XhL+)]
                   000086DA: F1 8101 B6        RES   6,(0181h)
-                  000086DE: 1C 2D87           CALL  0872Dh
+                  000086DE: 1C 2D87           CALL  0872Dh // VMX ACK?
                   000086E1: 0E                RET   
 
                ; else // (msg[5] == 0x00)
 
                   000086E2: F1 8101 B6        RES   6,(0181h)
-                  000086E6: 1C 2D87           CALL  0872Dh
+                  000086E6: 1C 2D87           CALL  0872Dh // VMX ACK?
                   000086E9: 0E                RET   
             
             ; else // (msg[4] != 0x02)
@@ -507,7 +507,7 @@ func_08569: // message handler
 
                   000086F9: F1 8101 BF        SET   7,(0181h)
                   000086FD: F1 8101 B6        RES   6,(0181h)
-                  00008701: 1C 2D87           CALL  0872Dh
+                  00008701: 1C 2D87           CALL  0872Dh // VMX ACK?
                   00008704: 0E                RET   
 
                ; else // (msg[4] != 0x09)
@@ -521,39 +521,50 @@ func_08569: // message handler
                   00008712: 7E 7FFE           JRL   NE/NZ,0008594h
 
                   00008715: F1 8101 B6        RES   6,(0181h)
-                  00008719: 1C 2D87           CALL  0872Dh
+                  00008719: 1C 2D87           CALL  0872Dh // VMX ACK?
                   0000871C: 0E                RET   
 
-0000871D: 29                PUSH  BC
-0000871E: 31 A001           LD    BC,001A0h
-00008721: D9 1C FD          DJNZ  BC,0008721h
-00008724: 49                POP   BC
-00008725: 0E                RET   
+// delay
+func_0871D: 
+   0000871D: 29                PUSH  BC
+   0000871E: 31 A001           LD    BC,001A0h
+   00008721: D9 1C FD          DJNZ  BC,0008721h
+   00008724: 49                POP   BC
+   00008725: 0E                RET   
 
-00008726: 1C 1D87           CALL  0871Dh
-00008729: C9 1C FA          DJNZ  A,0008726h
-0000872C: 0E                RET   
-0000872D: 21 03             LD    A,003h
-0000872F: 1C 2687           CALL  08726h
-00008732: 42 9A010000       LD    XDE,00000019Ah
-00008737: F5 E8 00 78       LD    (XDE+),078h
-0000873B: F5 E8 00 80       LD    (XDE+),080h
-0000873F: F5 E8 00 00       LD    (XDE+),000h
-00008743: F5 E8 00 20       LD    (XDE+),020h
-00008747: F5 E8 00 10       LD    (XDE+),010h
-0000874B: 20 08             LD    W,008h
-0000874D: F5 E8 00 00       LD    (XDE+),000h
-00008751: C8 1C F9          DJNZ  W,000874Dh
-00008754: F5 E8 00 06       LD    (XDE+),006h
-00008758: C0 13 21          LD    A,(13h)
-0000875B: C9 06             CPL   A
-0000875D: C9 CC 0F          AND   A,00Fh
-00008760: C0 18 20          LD    W,(18h)
-00008763: C8 06             CPL   W
-00008765: C8 23 00          LDCF  000h,W
-00008768: C9 24 04          STCF  004h,A
-0000876B: F5 E8 41          LD    (XDE+),A
-0000876E: F5 E8 00 06       LD    (XDE+),006h
+// delay(A)
+func_8726:
+   00008726: 1C 1D87           CALL  0871Dh // delay
+   00008729: C9 1C FA          DJNZ  A,0008726h
+   0000872C: 0E                RET   
+
+// VMX: ack?
+func_0872D:
+   0000872D: 21 03             LD    A,003h
+   0000872F: 1C 2687           CALL  08726h // delay(A)
+
+   00008732: 42 9A010000       LD    XDE,00000019Ah
+   00008737: F5 E8 00 78       LD    (XDE+),078h
+   0000873B: F5 E8 00 80       LD    (XDE+),080h
+   0000873F: F5 E8 00 00       LD    (XDE+),000h
+   00008743: F5 E8 00 20       LD    (XDE+),020h
+   00008747: F5 E8 00 10       LD    (XDE+),010h
+
+   ; 8 zeros
+   0000874B: 20 08             LD    W,008h
+   0000874D: F5 E8 00 00       LD    (XDE+),000h
+   00008751: C8 1C F9          DJNZ  W,000874Dh
+
+   00008754: F5 E8 00 06       LD    (XDE+),006h
+   00008758: C0 13 21          LD    A,(13h)
+   0000875B: C9 06             CPL   A
+   0000875D: C9 CC 0F          AND   A,00Fh
+   00008760: C0 18 20          LD    W,(18h)
+   00008763: C8 06             CPL   W
+   00008765: C8 23 00          LDCF  000h,W
+   00008768: C9 24 04          STCF  004h,A
+   0000876B: F5 E8 41          LD    (XDE+),A
+   0000876E: F5 E8 00 06       LD    (XDE+),006h
 
    ; if (msg_recv_flag)
    00008772: F1 8401 CA        BIT   2,(0184h)
@@ -562,28 +573,41 @@ func_08569: // message handler
       00008778: BA FF 00 15       LD    (XDE+FFFFFFFFh),015h
       0000877C: F1 8401 B2        RES   2,(0184h)
 
+   ; 4 zeros
    00008780: 20 04             LD    W,004h
    00008782: F5 E8 00 00       LD    (XDE+),000h
    00008786: C8 1C F9          DJNZ  W,0008782h
-   00008789: 1C 1D87           CALL  0871Dh
+
+   00008789: 1C 1D87           CALL  0871Dh // delay
+
    0000878C: F0 19 B2          RES   2,(19h)
    0000878F: C1 8001 3C 80     AND   (serial_status? 0180h),080h
+
+   ; Software interrupt - want send?
    00008794: FC                SWI   4
    00008795: 0E                RET   
 
+// VMX: 78|..|00|10|04|00
 func_8796:
    00008796: 21 03             LD    A,003h
-   00008798: 1C 2687           CALL  08726h
+   00008798: 1C 2687           CALL  08726h // delay(A)
+
+   ; Start message
    0000879B: 42 9A010000       LD    XDE,00000019Ah
    000087A0: F5 E8 00 78       LD    (XDE+),078h
    000087A4: F5 E8 00 80       LD    (XDE+),080h
    000087A8: F5 E8 00 00       LD    (XDE+),000h
    000087AC: F5 E8 00 20       LD    (XDE+),020h
    000087B0: F5 E8 00 04       LD    (XDE+),004h
+   
+   ; 8 bytes of 0
    000087B4: 20 08             LD    W,008h
    000087B6: F5 E8 00 00       LD    (XDE+),000h
    000087BA: C8 1C F9          DJNZ  W,00087B6h
+
    000087BD: F5 E8 00 16       LD    (XDE+),016h
+
+   ; Same logic used during VMX message digest for addr check
    000087C1: C0 13 21          LD    A,(13h)
    000087C4: C9 CC 0F          AND   A,00Fh
    000087C7: C0 18 20          LD    W,(18h)
@@ -591,21 +615,27 @@ func_8796:
    000087CD: C9 24 04          STCF  004h,A
    000087D0: C9 31 05          SET   005h,A
    000087D3: F5 E8 41          LD    (XDE+),A
+
    000087D6: F5 E8 00 FF       LD    (XDE+),0FFh
    000087DA: F5 E8 00 01       LD    (XDE+),001h
+
+   ; Width/height? Incorrectly initialized/bogus
    000087DE: F5 E8148E 01      LD    (XDE+),(018Eh)
    000087E3: 8A FF 61          INC   1,(XDE+FFFFFFFFh)
    000087E6: F5 E8148F 01      LD    (XDE+),(018Fh)
    000087EB: 8A FF 61          INC   1,(XDE+FFFFFFFFh)
    000087EE: F5 E8 00 08       LD    (XDE+),008h
-   000087F2: 1C 1D87           CALL  0871Dh
+   000087F2: 1C 1D87           CALL  0871Dh // delay
+
    000087F5: F0 19 B2          RES   2,(19h)
    000087F8: C1 8001 3C 80     AND   (serial_status? 0180h),080h
    000087FD: FC                SWI   4
    000087FE: F1 8001 CA        BIT   2,(serial_status? 0180h)
    00008802: 66 FA             JR    EQ/Z,00087FEh
    00008804: 21 03             LD    A,003h
-   00008806: 1C 2687           CALL  08726h
+   00008806: 1C 2687           CALL  08726h // delay(A)
+
+   ; Start message
    00008809: 42 9A010000       LD    XDE,00000019Ah
    0000880E: F5 E8 00 78       LD    (XDE+),078h
    00008812: F5 E8 00 80       LD    (XDE+),080h
@@ -614,10 +644,13 @@ func_8796:
    0000881E: F5 E8 00 00       LD    (XDE+),000h
    00008822: F5 E8 00 FF       LD    (XDE+),0FFh
    00008826: F5 E8 00 19       LD    (XDE+),019h
+
+   ; 14 bytes of 0
    0000882A: 20 0D             LD    W,00Dh
    0000882C: F5 E8 00 00       LD    (XDE+),000h
    00008830: C8 1C F9          DJNZ  W,000882Ch
-   00008833: 1C 1D87           CALL  0871Dh
+   00008833: 1C 1D87           CALL  0871Dh // delay
+   
    00008836: F0 19 B2          RES   2,(19h)
    00008839: C1 8001 3C 80     AND   (serial_status? 0180h),080h
    0000883E: FC                SWI   4
