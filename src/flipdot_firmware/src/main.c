@@ -213,11 +213,18 @@ typedef enum {
     FS_WANT_IGNORE = 6,
 } FramerState;
 
+typedef enum {
+    ERR_NONE = 0,
+    ERR_ADDR = 1,
+    ERR_PAYLOAD_TERM = 2,
+    ERR_CHECKSUM = 3,
+} FramerError;
+
 typedef struct {
-    uint8_t debugBuffer[6];
-    uint8_t debugBufferFront;
+    uint8_t numBytesReceived;
 
     FramerState state;
+    FramerError error;
 
     uint8_t stateBytesRemain;
     uint8_t checksum;
@@ -241,12 +248,7 @@ void framer_init(Framer* this) {
 }
 
 void framer_accept(Framer* this, uint8_t data) {
-    this->debugBuffer[this->debugBufferFront] = data;
-
-    // TODO: Arithmetic is broken...
-    if (++this->debugBufferFront == sizeof(this->debugBuffer)) {
-        this->debugBufferFront = 0;
-    }
+    this->numBytesReceived++;
 
     Message* msg = &this->messages[this->messageWriteFront];
 
@@ -256,18 +258,23 @@ void framer_accept(Framer* this, uint8_t data) {
                 return;
             }
 
-            this->checksum = 0;
+            this->checksum = data;
+
             this->state = FS_WANT_ADDR;
+            this->error = ERR_NONE;
         } break;
 
         case FS_WANT_ADDR: {
+            this->checksum += data;
+
             if (data != 1) {
                 this->state = FS_WANT_IGNORE;
                 this->stateBytesRemain = 19;
+
+                this->error = ERR_ADDR;
                 return;
             }
 
-            this->checksum += data;
             this->state = FS_WANT_TYPE;
         } break;
 
@@ -283,7 +290,7 @@ void framer_accept(Framer* this, uint8_t data) {
         case FS_WANT_PAYLOAD: {
             this->checksum += data;
 
-            msg->payload[sizeof(msg->payload) - this->stateBytesRemain] = data;
+            msg->payload[sizeof(msg->payload) - this->stateBytesRemain - 1] = data;
 
             if (--this->stateBytesRemain != 0) {
                 return;
@@ -298,8 +305,12 @@ void framer_accept(Framer* this, uint8_t data) {
             if (data != 0x0) {
                 this->state = FS_WANT_IGNORE;
                 this->stateBytesRemain = 1;
+
+                this->error = ERR_PAYLOAD_TERM;
                 return;
             }
+
+            this->state = FS_WANT_CHECKSUM;
         } break;
 
         case FS_WANT_CHECKSUM: {
@@ -307,12 +318,15 @@ void framer_accept(Framer* this, uint8_t data) {
             this->state = FS_WANT_FRAME_START;
 
             if (this->checksum != 0) {
+                this->error = ERR_CHECKSUM;
                 return;
             }
 
-            uint8_t nextFront = (this->messageWriteFront + 1) % sizeof(this->messages);
-            if (nextFront == this->messageAvailableFront) {
-                return;
+            uint8_t nextFront = this->messageWriteFront + 1;
+
+            // TODO: Arithmetic is broken
+            if (nextFront == sizeof(this->messages) - 1) {
+                nextFront = 0;
             }
 
             this->messageWriteFront = nextFront;
@@ -366,11 +380,11 @@ void main(void) {
 
     // Serial mode setup
     {
-        // 11...... = 9 bit UART
+        // 01...... = 8 bit UART
         // ..0..... = Disable multiprocessor communication
         // ...1.... = Enable serial reception
         // ....0... = 9th bit to transmit
-        SCON = 0b11010000;
+        SCON = 0b01010000;
 
         // Enable interrupt
         ES = true;
@@ -379,7 +393,7 @@ void main(void) {
         PS = 1;
     }
 
-    // Timer 1 setup (19200 baud rate generator), 11.0592 MHz crystal
+    // Timer 1 setup (9600 baud rate generator), 11.0592 MHz crystal
     {
         // 0...---- = Enable timer with TR1
         // .0..---- = Use system clock as source
@@ -388,9 +402,6 @@ void main(void) {
 
         // Required reset value
         TH1 = 0xFD;
-
-        // 1....... = Enable baud rate doubling
-        PCON = 0b10000000;
     }
 
     framer_init(&g_framer);
@@ -411,11 +422,12 @@ void main(void) {
 
     while (true) {
         for (uint8_t i = 0; i < 16; i++) {
-            framebuffer_hex_string(&g_buffer, 0, 0, &g_framer.debugBuffer[0], 6);
-            framebuffer_hex_string(&g_buffer, 0, 8, &g_framer.debugBufferFront, 1);
+            framebuffer_hex_string(&g_buffer, 0, 0, &g_framer.numBytesReceived, 1);
+            framebuffer_hex_string(&g_buffer, 10, 0, &g_framer.state, 1);
+            watchdog();
 
-            framebuffer_hex_string(&g_buffer, 10, 8, &g_framer.state, 1);
-            framebuffer_hex_string(&g_buffer, 20, 8, &g_framer.messageWriteFront, 1);
+            framebuffer_hex_string(&g_buffer, 20, 0, &g_framer.error, 1);
+            framebuffer_hex_string(&g_buffer, 30, 0, &g_framer.messageWriteFront, 1);
 
             framebuffer_blit(&g_current, &g_buffer, true);
             delay();
