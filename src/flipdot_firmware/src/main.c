@@ -145,41 +145,128 @@ void delay(void) {
     }
 }
 
-const uint8_t kSmallHexFont[16][3] = {
-    {0b11111, 0b10001, 0b11111}, // 0
-    {0b00000, 0b11111, 0b00000}, // 1
-    {0b10111, 0b10101, 0b11101}, // 2
-    {0b10101, 0b10101, 0b11111}, // 3
-    {0b11100, 0b00100, 0b11111}, // 4
-    {0b11101, 0b10101, 0b10111}, // 5
-    {0b11111, 0b10101, 0b10111}, // 6
-    {0b10000, 0b10000, 0b11111}, // 7
-    {0b11111, 0b10101, 0b11111}, // 8
-    {0b11100, 0b10100, 0b11111}, // 9
-    {0b01111, 0b10100, 0b01111}, // A
-    {0b11111, 0b10101, 0b01010}, // B
-    {0b01110, 0b10001, 0b01010}, // C
-    {0b11111, 0b10001, 0b01110}, // D
-    {0b11111, 0b10101, 0b10001}, // E
-    {0b11111, 0b10100, 0b10000}, // F
-};
+typedef enum {
+    MT_COMMAND = 0,
+    MT_DMA = 1,
+} MessageType;
 
-void hex(uint8_t x, uint8_t y, uint8_t value) {
-    value = value & 15;
+typedef struct {
+    uint8_t type;
+    uint8_t payload[16];
+} Message;
 
-    for (uint8_t offX = 0; offX < 3; offX++) {
-        uint8_t column = kSmallHexFont[value][offX];
+typedef enum {
+    FS_WANT_FRAME_START = 0,
+    FS_WANT_ADDR = 1,
+    FS_WANT_TYPE = 2,
+    FS_WANT_PAYLOAD = 3,
+    FS_WANT_PAYLOAD_CLOSE = 4,
+    FS_WANT_CHECKSUM = 5,
+    FS_WANT_IGNORE = 6,
+} FramerState;
 
-        for (uint8_t offY = 0; offY < 5; offY++) {
-            pixelPortWritePixel(x + offX, y + offY, (column >> (4 - offY)) & 1);
-        }
-    }
+typedef struct {
+    uint8_t debugBuffer[32];
+    uint8_t debugBufferFront;
+
+    FramerState state;
+
+    uint8_t stateBytesRemain;
+    uint8_t checksum;
+
+    uint8_t messageWriteFront;
+    uint8_t messageAvailableFront;
+
+    uint8_t messageReadFront;
+
+    Message messages[4];
+} Framer;
+
+__xdata Framer g_framer;
+
+void framer_init(Framer* this) {
+    this->state = FS_WANT_FRAME_START;
+
+    this->messageWriteFront = 1;
+    this->messageAvailableFront = 0;
+    this->messageReadFront = 0;
 }
 
-void hexString(uint8_t x, uint8_t y, uint8_t data[], uint8_t len) {
-    for (uint8_t i = 0; i < len; i++) {
-        hex(x + i * 8 + 0, y, data[i] >> 4);
-        hex(x + i * 8 + 4, y, data[i] & 15);
+void framer_accept(Framer* this, uint8_t data) {
+    this->debugBuffer[this->debugBufferFront] = data;
+    this->debugBufferFront =
+        (this->debugBufferFront + 1) % sizeof(this->debugBuffer);
+
+    Message* msg = &this->messages[this->messageWriteFront];
+
+    switch (this->state) {
+        case FS_WANT_FRAME_START: {
+            if (data != 0x78) {
+                return;
+            }
+
+            this->checksum = 0;
+            this->state = FS_WANT_ADDR;
+        } break;
+
+        case FS_WANT_ADDR: {
+            if (data != 1) {
+                this->state = FS_WANT_IGNORE;
+                this->stateBytesRemain = 19;
+                return;
+            }
+
+            this->checksum += data;
+            this->state = FS_WANT_TYPE;
+        } break;
+
+        case FS_WANT_TYPE: {
+            this->checksum += data;
+
+            msg->type = data;
+
+            this->state = FS_WANT_PAYLOAD;
+            this->stateBytesRemain = sizeof(msg->payload);
+        } break;
+
+        case FS_WANT_PAYLOAD: {
+            this->checksum += data;
+
+            msg->payload[sizeof(msg->payload) - this->stateBytesRemain] = data;
+
+            if (--this->stateBytesRemain != 0) {
+                return;
+            }
+
+            this->state = FS_WANT_PAYLOAD_CLOSE;
+        } break;
+
+        case FS_WANT_PAYLOAD_CLOSE: {
+            this->checksum += data;
+
+            if (data != 0x0) {
+                this->state = FS_WANT_IGNORE;
+                this->stateBytesRemain = 2;
+                return;
+            }
+        } break;
+
+        case FS_WANT_CHECKSUM: {
+            this->checksum += data;
+            this->state = FS_WANT_FRAME_START;
+
+            if (this->checksum != 0) {
+                return;
+            }
+
+            uint8_t nextFront =
+                (this->messageWriteFront + 1) % sizeof(this->messages);
+            if (nextFront == this->messageAvailableFront) {
+                return;
+            }
+
+            this->messageWriteFront = nextFront;
+        } break;
     }
 }
 
@@ -204,7 +291,7 @@ void interrupt_timer_1(void) __interrupt(3) {
 }
 
 void interrupt_serial(void) __interrupt(4) {
-    g_recv = SBUF;
+    framer_accept(&g_framer, SBUF);
 
     // Clear interrupt flag to continue receiving interrupts
     RI = false;
@@ -250,6 +337,8 @@ void main(void) {
         PCON = 0b10000000;
     }
 
+    framer_init(&g_framer);
+
     // Finish startup
     {
         // Enable specified interrupts
@@ -288,13 +377,11 @@ void main(void) {
     g_serialReceiveDisable = false;
     g_pixelPortDisable = false;
 
-    framebuffer_blit(&g_current, &g_patternA, false);
+    framebuffer_blit(&g_current, &g_current, false);
 
     while (true) {
-        framebuffer_blit(&g_current, &g_patternB, true);
-        delay();
-
-        framebuffer_blit(&g_current, &g_patternA, true);
+        hexString(0, 0, &g_framer.debugBuffer[0], 6);
+        hexString(0, 8, &g_framer.debugBufferFront, 1);
         delay();
     }
 }
