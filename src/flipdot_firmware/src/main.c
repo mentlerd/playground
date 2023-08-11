@@ -100,9 +100,9 @@ void framebuffer_set_pixel(Framebuffer* this, uint8_t x, uint8_t y,
     }
 }
 
-void framebuffer_blit(Framebuffer* this, const Framebuffer* current) {
-    uint8_t* targetFront = this->blocks;
-    uint8_t* currentFront = current->blocks;
+void framebuffer_blit(Framebuffer* this, const Framebuffer* buffer, bool diff) {
+    uint8_t* currentFront = this->blocks;
+    uint8_t* targetFront = buffer->blocks;
 
     for (uint8_t y = 0; y < DISPLAY_H; y++) {
         uint8_t x = 0;
@@ -111,21 +111,23 @@ void framebuffer_blit(Framebuffer* this, const Framebuffer* current) {
         //  of pixels which are actually in the target state anyway
         for (uint8_t block = 0; block < BLOCKS_PER_ROW; block++) {
             uint8_t target = *(targetFront++);
-            uint8_t diff;
+            uint8_t mask;
 
-            if (current) {
-                diff = target ^ *(currentFront)++;
+            if (diff) {
+                mask = target ^ *currentFront;
             } else {
-                diff = 0xFF;
+                mask = 0xFF;
             }
 
+            *(currentFront++) = target;
+
             for (uint8_t pixel = 0; pixel < 8; pixel++) {
-                if (diff & 1) {
+                if (mask & 1) {
                     pixelPortWritePixel(x, y, target & 1);
                 }
 
                 target >>= 1;
-                diff >>= 1;
+                mask >>= 1;
 
                 x++;
             }
@@ -210,8 +212,10 @@ void interrupt_serial(void) __interrupt(4) {
 
 volatile __xdata __at(0x1FF8 | (1 << 13)) uint8_t g_clockData[7];
 
-__xdata Framebuffer g_bufferA;
-__xdata Framebuffer g_bufferB;
+__xdata Framebuffer g_current;
+
+__xdata Framebuffer g_patternA;
+__xdata Framebuffer g_patternB;
 
 void main(void) {
     delay();
@@ -256,7 +260,7 @@ void main(void) {
     }
 
     {
-        uint8_t* writeFront = g_bufferA.blocks;
+        uint8_t* writeFront = g_patternA.blocks;
 
         for (uint8_t y = 0; y < DISPLAY_H; y++) {
             for (uint8_t b = 0; b < BLOCKS_PER_ROW; b++) {
@@ -267,7 +271,7 @@ void main(void) {
         }
     }
     {
-        uint8_t* writeFront = g_bufferB.blocks;
+        uint8_t* writeFront = g_patternB.blocks;
 
         for (uint8_t y = 0; y < DISPLAY_H / 2; y++) {
             for (uint8_t b = 0; b < BLOCKS_PER_ROW; b++) {
@@ -284,13 +288,13 @@ void main(void) {
     g_serialReceiveDisable = false;
     g_pixelPortDisable = false;
 
-    framebuffer_blit(&g_bufferA, 0);
+    framebuffer_blit(&g_current, &g_patternA, false);
 
     while (true) {
-        framebuffer_blit(&g_bufferB, &g_bufferA);
+        framebuffer_blit(&g_current, &g_patternB, true);
         delay();
 
-        framebuffer_blit(&g_bufferA, &g_bufferB);
+        framebuffer_blit(&g_current, &g_patternA, true);
         delay();
     }
 }
