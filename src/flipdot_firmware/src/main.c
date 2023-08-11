@@ -11,6 +11,25 @@
 #define DISPLAY_H 16
 #endif
 
+/// Due to hardware speed limitations, framebuffer data is stored in a
+///  way to make it quick and efficient to blit it onto the pixel matrix.
+///
+/// This comes at the cost of pixel rendering operations being slightly less
+///  efficient/easy to understand, but provides similar (or faster) refresh
+///  rate to the original firmware.
+///
+/// Pixels are stored as tightly packed blocks of 8 in a contiguous array,
+/// starting  from the top left corner, and progressing towards the bottom
+/// right.
+///
+/// Each row contains enough blocks to cover the selected display resolution,
+///  with additional paddig bits at the end of the last block if the display
+///  width is not and exact multiple of blocks.
+///
+/// Note that these padding pixels are still sent through the pixel port, and
+///  the matrix hardware is expected to disregard these commands.
+#define BLOCKS_PER_ROW ((DISPLAY_W + 7) / 8)
+
 #include <8051.h>
 
 #include <stdbool.h>
@@ -45,16 +64,8 @@ void pixelPortWriteByte(uint8_t value) {
     }
 }
 
-void delay(void) {
-    for (uint8_t i = 0; i < 5; i++) {
-        for (uint8_t j = 0; j < 100; j++) {
-            watchdog();
-        }
-    }
-}
-
 /// Send a pixel flip command to the distributor
-void pixel(uint8_t x, uint8_t y, bool dir) {
+void pixelPortWritePixel(uint8_t x, uint8_t y, bool dir) {
     // mode?
     pixelPortWriteByte(0xFE);
 
@@ -71,6 +82,65 @@ void pixel(uint8_t x, uint8_t y, bool dir) {
     g_pixelPortStrobe = false;
 
     watchdog();
+}
+
+typedef struct {
+    uint8_t blocks[BLOCKS_PER_ROW * DISPLAY_H];
+} Framebuffer;
+
+void framebuffer_set_pixel(Framebuffer* this, uint8_t x, uint8_t y,
+                           bool target) {
+    uint16_t blockIndex = (x / 8) + (y * BLOCKS_PER_ROW);
+    uint8_t pixel = x & 7;
+
+    uint8_t block = this->blocks[blockIndex];
+
+    if (block >> pixel != target) {
+        this->blocks[blockIndex] = block ^ (1 << pixel);
+    }
+}
+
+void framebuffer_blit(Framebuffer* this, const Framebuffer* current) {
+    uint8_t* targetFront = this->blocks;
+    uint8_t* currentFront = current->blocks;
+
+    for (uint8_t y = 0; y < DISPLAY_H; y++) {
+        uint8_t x = 0;
+
+        // Process difference in blocks, this way we can early reject blocks
+        //  of pixels which are actually in the target state anyway
+        for (uint8_t block = 0; block < BLOCKS_PER_ROW; block++) {
+            uint8_t target = *(targetFront++);
+            uint8_t diff;
+
+            if (current) {
+                diff = target ^ *(currentFront)++;
+            } else {
+                diff = 0xFF;
+            }
+
+            for (uint8_t pixel = 0; pixel < 8; pixel++) {
+                if (diff & 1) {
+                    pixelPortWritePixel(x, y, target & 1);
+                }
+
+                target >>= 1;
+                diff >>= 1;
+
+                x++;
+            }
+
+            watchdog();
+        }
+    }
+}
+
+void delay(void) {
+    for (uint8_t i = 0; i < 50; i++) {
+        for (uint8_t j = 0; j < 100; j++) {
+            watchdog();
+        }
+    }
 }
 
 const uint8_t kSmallHexFont[16][3] = {
@@ -99,7 +169,7 @@ void hex(uint8_t x, uint8_t y, uint8_t value) {
         uint8_t column = kSmallHexFont[value][offX];
 
         for (uint8_t offY = 0; offY < 5; offY++) {
-            pixel(x + offX, y + offY, (column >> (4 - offY)) & 1);
+            pixelPortWritePixel(x + offX, y + offY, (column >> (4 - offY)) & 1);
         }
     }
 }
@@ -139,6 +209,9 @@ void interrupt_serial(void) __interrupt(4) {
 }
 
 volatile __xdata __at(0x1FF8 | (1 << 13)) uint8_t g_clockData[7];
+
+__xdata Framebuffer g_bufferA;
+__xdata Framebuffer g_bufferB;
 
 void main(void) {
     delay();
@@ -182,59 +255,42 @@ void main(void) {
         TR1 = true;
     }
 
+    {
+        uint8_t* writeFront = g_bufferA.blocks;
+
+        for (uint8_t y = 0; y < DISPLAY_H; y++) {
+            for (uint8_t b = 0; b < BLOCKS_PER_ROW; b++) {
+                *(writeFront++) = 0;
+            }
+
+            watchdog();
+        }
+    }
+    {
+        uint8_t* writeFront = g_bufferB.blocks;
+
+        for (uint8_t y = 0; y < DISPLAY_H / 2; y++) {
+            for (uint8_t b = 0; b < BLOCKS_PER_ROW; b++) {
+                *(writeFront++) = 0b01010101;
+            }
+            for (uint8_t b = 0; b < BLOCKS_PER_ROW; b++) {
+                *(writeFront++) = 0b10101010;
+            }
+
+            watchdog();
+        }
+    }
+
     g_serialReceiveDisable = false;
     g_pixelPortDisable = false;
 
-    for (uint8_t x = 0; x < DISPLAY_W; x++) {
-        for (uint8_t y = 0; y < DISPLAY_H; y++) {
-            pixel(x, y, false);
-        }
-    }
-
-    pixel(9, 2, true);
-    pixel(9, 4, true);
-    pixel(19, 2, true);
-    pixel(19, 4, true);
-
-    if (kConfig & 1) {
-        // 1....... = Write
-        // .0...... = Read
-        // ..1..... = Stop
-        // ...01000 = Calibration
-        g_clockData[0] = 0b10101000;
-
-        for (uint8_t i = 1; i < 8; i++) {
-            g_clockData[i] = 0;
-        }
-    }
-
-    uint8_t prev = 0;
-    uint8_t curr;
+    framebuffer_blit(&g_bufferA, 0);
 
     while (true) {
-        // 0100..... = Read
-        g_clockData[0] = 0b01001000;
+        framebuffer_blit(&g_bufferB, &g_bufferA);
+        delay();
 
-        curr = g_clockData[1];
-
-        if (prev != curr) {
-            prev = curr;
-        } else {
-            // 000..... = Update
-            g_clockData[0] = 0b00001000;
-
-            for (uint8_t i = 0; i < 10; i++) {
-                delay();
-            }
-            continue;
-        }
-
-        // HH:MM:SS
-        hexString(1, 1, &g_clockData[3], 1);
-        hexString(11, 1, &g_clockData[2], 1);
-        hexString(21, 1, &g_clockData[1], 1);
-
-        // 000..... = Update
-        g_clockData[0] = 0b00001000;
+        framebuffer_blit(&g_bufferA, &g_bufferB);
+        delay();
     }
 }
