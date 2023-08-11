@@ -9,7 +9,7 @@ add_executable(firmware
 )
 
 target_compile_definitions(firmware PRIVATE
-	"DISPLAY_W=32"
+	"DISPLAY_W=48"
 	"DISPLAY_H=16"
 )
 

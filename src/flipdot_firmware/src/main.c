@@ -28,7 +28,7 @@
 ///
 /// Note that these padding pixels are still sent through the pixel port, and
 ///  the matrix hardware is expected to disregard these commands.
-#define BLOCKS_PER_ROW ((DISPLAY_W + 7) / 8)
+#define BLOCKS_PER_ROW ((uint8_t)((DISPLAY_W + 7) / 8))
 
 #include <8051.h>
 
@@ -88,15 +88,63 @@ typedef struct {
     uint8_t blocks[BLOCKS_PER_ROW * DISPLAY_H];
 } Framebuffer;
 
-void framebuffer_set_pixel(Framebuffer* this, uint8_t x, uint8_t y,
-                           bool target) {
+void framebuffer_pixel(Framebuffer* this, uint8_t x, uint8_t y, bool target) {
     uint16_t blockIndex = (x / 8) + (y * BLOCKS_PER_ROW);
     uint8_t pixel = x & 7;
 
+    // TODO: 16 bit arithmetic is really weird/broken for some reason
+    {
+        blockIndex = 0;
+        blockIndex = x >> 3;
+
+        for (uint8_t i = 0; i < y; i++) {
+            blockIndex += BLOCKS_PER_ROW;
+        }
+    }
+
     uint8_t block = this->blocks[blockIndex];
 
-    if (block >> pixel != target) {
+    bool current = (block >> pixel) & 1;
+    if (current != target) {
         this->blocks[blockIndex] = block ^ (1 << pixel);
+    }
+}
+
+const uint8_t kSmallHexFont[16][3] = {
+    {0b11111, 0b10001, 0b11111}, // 0
+    {0b00000, 0b11111, 0b00000}, // 1
+    {0b10111, 0b10101, 0b11101}, // 2
+    {0b10101, 0b10101, 0b11111}, // 3
+    {0b11100, 0b00100, 0b11111}, // 4
+    {0b11101, 0b10101, 0b10111}, // 5
+    {0b11111, 0b10101, 0b10111}, // 6
+    {0b10000, 0b10000, 0b11111}, // 7
+    {0b11111, 0b10101, 0b11111}, // 8
+    {0b11100, 0b10100, 0b11111}, // 9
+    {0b01111, 0b10100, 0b01111}, // A
+    {0b11111, 0b10101, 0b01010}, // B
+    {0b01110, 0b10001, 0b01010}, // C
+    {0b11111, 0b10001, 0b01110}, // D
+    {0b11111, 0b10101, 0b10001}, // E
+    {0b11111, 0b10100, 0b10000}, // F
+};
+
+void framebuffer_hex(Framebuffer* this, uint8_t x, uint8_t y, uint8_t value) {
+    value = value & 15;
+
+    for (uint8_t offX = 0; offX < 3; offX++) {
+        uint8_t column = kSmallHexFont[value][offX];
+
+        for (uint8_t offY = 0; offY < 5; offY++) {
+            framebuffer_pixel(this, x + offX, y + offY, (column >> (4 - offY)) & 1);
+        }
+    }
+}
+
+void framebuffer_hex_string(Framebuffer* this, uint8_t x, uint8_t y, uint8_t data[], uint8_t len) {
+    for (uint8_t i = 0; i < len; i++) {
+        framebuffer_hex(this, x + i * 8 + 0, y, data[i] >> 4);
+        framebuffer_hex(this, x + i * 8 + 4, y, data[i] & 15);
     }
 }
 
@@ -166,7 +214,7 @@ typedef enum {
 } FramerState;
 
 typedef struct {
-    uint8_t debugBuffer[32];
+    uint8_t debugBuffer[6];
     uint8_t debugBufferFront;
 
     FramerState state;
@@ -194,8 +242,11 @@ void framer_init(Framer* this) {
 
 void framer_accept(Framer* this, uint8_t data) {
     this->debugBuffer[this->debugBufferFront] = data;
-    this->debugBufferFront =
-        (this->debugBufferFront + 1) % sizeof(this->debugBuffer);
+
+    // TODO: Arithmetic is broken...
+    if (++this->debugBufferFront == sizeof(this->debugBuffer)) {
+        this->debugBufferFront = 0;
+    }
 
     Message* msg = &this->messages[this->messageWriteFront];
 
@@ -246,7 +297,7 @@ void framer_accept(Framer* this, uint8_t data) {
 
             if (data != 0x0) {
                 this->state = FS_WANT_IGNORE;
-                this->stateBytesRemain = 2;
+                this->stateBytesRemain = 1;
                 return;
             }
         } break;
@@ -259,13 +310,20 @@ void framer_accept(Framer* this, uint8_t data) {
                 return;
             }
 
-            uint8_t nextFront =
-                (this->messageWriteFront + 1) % sizeof(this->messages);
+            uint8_t nextFront = (this->messageWriteFront + 1) % sizeof(this->messages);
             if (nextFront == this->messageAvailableFront) {
                 return;
             }
 
             this->messageWriteFront = nextFront;
+        } break;
+
+        case FS_WANT_IGNORE: {
+            if (--this->stateBytesRemain != 0) {
+                return;
+            }
+
+            this->state = FS_WANT_FRAME_START;
         } break;
     }
 }
@@ -300,9 +358,7 @@ void interrupt_serial(void) __interrupt(4) {
 volatile __xdata __at(0x1FF8 | (1 << 13)) uint8_t g_clockData[7];
 
 __xdata Framebuffer g_current;
-
-__xdata Framebuffer g_patternA;
-__xdata Framebuffer g_patternB;
+__xdata Framebuffer g_buffer;
 
 void main(void) {
     delay();
@@ -348,40 +404,21 @@ void main(void) {
         TR1 = true;
     }
 
-    {
-        uint8_t* writeFront = g_patternA.blocks;
-
-        for (uint8_t y = 0; y < DISPLAY_H; y++) {
-            for (uint8_t b = 0; b < BLOCKS_PER_ROW; b++) {
-                *(writeFront++) = 0;
-            }
-
-            watchdog();
-        }
-    }
-    {
-        uint8_t* writeFront = g_patternB.blocks;
-
-        for (uint8_t y = 0; y < DISPLAY_H / 2; y++) {
-            for (uint8_t b = 0; b < BLOCKS_PER_ROW; b++) {
-                *(writeFront++) = 0b01010101;
-            }
-            for (uint8_t b = 0; b < BLOCKS_PER_ROW; b++) {
-                *(writeFront++) = 0b10101010;
-            }
-
-            watchdog();
-        }
-    }
-
     g_serialReceiveDisable = false;
     g_pixelPortDisable = false;
 
-    framebuffer_blit(&g_current, &g_current, false);
+    framebuffer_blit(&g_current, &g_buffer, false);
 
     while (true) {
-        hexString(0, 0, &g_framer.debugBuffer[0], 6);
-        hexString(0, 8, &g_framer.debugBufferFront, 1);
-        delay();
+        for (uint8_t i = 0; i < 16; i++) {
+            framebuffer_hex_string(&g_buffer, 0, 0, &g_framer.debugBuffer[0], 6);
+            framebuffer_hex_string(&g_buffer, 0, 8, &g_framer.debugBufferFront, 1);
+
+            framebuffer_hex_string(&g_buffer, 10, 8, &g_framer.state, 1);
+            framebuffer_hex_string(&g_buffer, 20, 8, &g_framer.messageWriteFront, 1);
+
+            framebuffer_blit(&g_current, &g_buffer, true);
+            delay();
+        }
     }
 }
