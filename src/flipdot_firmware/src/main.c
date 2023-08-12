@@ -11,25 +11,6 @@
 #define DISPLAY_H 16
 #endif
 
-/// Due to hardware speed limitations, framebuffer data is stored in a
-///  way to make it quick and efficient to blit it onto the pixel matrix.
-///
-/// This comes at the cost of pixel rendering operations being slightly less
-///  efficient/easy to understand, but provides similar (or faster) refresh
-///  rate to the original firmware.
-///
-/// Pixels are stored as tightly packed blocks of 8 in a contiguous array,
-/// starting  from the top left corner, and progressing towards the bottom
-/// right.
-///
-/// Each row contains enough blocks to cover the selected display resolution,
-///  with additional paddig bits at the end of the last block if the display
-///  width is not and exact multiple of blocks.
-///
-/// Note that these padding pixels are still sent through the pixel port, and
-///  the matrix hardware is expected to disregard these commands.
-#define BLOCKS_PER_ROW ((uint8_t)((DISPLAY_W + 7) / 8))
-
 #include <8051.h>
 
 #include <stdbool.h>
@@ -122,28 +103,22 @@ void pixelPortWritePixel(uint8_t x, uint8_t y, bool dir) {
 // ==========[ Framebuffer ]==========
 
 typedef struct {
-    uint8_t blocks[BLOCKS_PER_ROW * DISPLAY_H];
+    uint8_t pixels[(DISPLAY_W * DISPLAY_H + 7) / 8];
 } Framebuffer;
 
 void framebuffer_pixel(Framebuffer* this, uint8_t x, uint8_t y, bool target) {
-    uint16_t blockIndex = (x / 8) + (y * BLOCKS_PER_ROW);
-    uint8_t pixel = x & 7;
-
-    // TODO: 16 bit arithmetic is really weird/broken for some reason
-    {
-        blockIndex = 0;
-        blockIndex = x >> 3;
-
-        for (uint8_t i = 0; i < y; i++) {
-            blockIndex += BLOCKS_PER_ROW;
-        }
+    if (DISPLAY_W <= x || DISPLAY_H <= y) {
+        return;
     }
 
-    uint8_t block = this->blocks[blockIndex];
+    uint16_t pixelIndex = (x + y * ((uint8_t)DISPLAY_W));
 
-    bool current = (block >> pixel) & 1;
+    uint8_t block = this->pixels[pixelIndex / 8u];
+    uint8_t index = pixelIndex % 8u;
+
+    bool current = (block >> index) & 1;
     if (current != target) {
-        this->blocks[blockIndex] = block ^ (1 << pixel);
+        this->pixels[pixelIndex / 8u] = block ^ (1 << index);
     }
 }
 
@@ -186,38 +161,42 @@ void framebuffer_hex_string(Framebuffer* this, uint8_t x, uint8_t y, uint8_t dat
 }
 
 void framebuffer_blit(Framebuffer* this, const Framebuffer* buffer, bool diff) {
-    uint8_t* currentFront = this->blocks;
-    uint8_t* targetFront = buffer->blocks;
+    uint8_t* currentFront = this->pixels;
+    uint8_t* targetFront = buffer->pixels;
 
-    for (uint8_t y = 0; y < DISPLAY_H; y++) {
-        uint8_t x = 0;
+    uint8_t x = 0;
+    uint8_t y = 0;
 
-        // Process difference in blocks, this way we can early reject blocks
-        //  of pixels which are actually in the target state anyway
-        for (uint8_t block = 0; block < BLOCKS_PER_ROW; block++) {
-            uint8_t target = *(targetFront++);
-            uint8_t mask;
+    while (true) {
+        // Consume next block of pixels, determine which needs flipping
+        uint8_t target = *(targetFront++);
+        uint8_t mask;
 
-            if (diff) {
-                mask = target ^ *currentFront;
-            } else {
-                mask = 0xFF;
+        if (diff) {
+            mask = target ^ *currentFront;
+        } else {
+            mask = 0xFF;
+        }
+
+        // Overwrite current state
+        *(currentFront++) = target;
+
+        // Perform flips
+        for (uint8_t i = 0; i < 8; i++) {
+            if (mask & 1) {
+                pixelPortWritePixel(x, y, target & 1);
             }
 
-            *(currentFront++) = target;
+            target >>= 1;
+            mask >>= 1;
 
-            for (uint8_t pixel = 0; pixel < 8; pixel++) {
-                if (mask & 1) {
-                    pixelPortWritePixel(x, y, target & 1);
+            if (++x == DISPLAY_W) {
+                x = 0;
+
+                if (++y == DISPLAY_H) {
+                    return;
                 }
-
-                target >>= 1;
-                mask >>= 1;
-
-                x++;
             }
-
-            watchdog();
         }
     }
 }
