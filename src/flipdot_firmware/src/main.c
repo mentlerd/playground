@@ -35,6 +35,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// ==========[ Startup/Watchdog ]==========
+
 __sbit __at(0xB5) g_watchdogResetPin;
 
 unsigned char __sdcc_external_startup(void) {
@@ -57,6 +59,23 @@ void watchdog(void) {
     g_watchdogResetPin = true;
     g_watchdogResetPin = false;
 }
+
+// ==========[ Configuration ]==========
+
+volatile __xdata __at(0x8000) uint8_t kConfigSwitches = 0;
+
+typedef enum {
+    CP_FGY = 0,
+    CP_VMX = 1,
+} Protocol;
+
+typedef struct {
+    Protocol protocol;
+} Config;
+
+void config_init(Config* this) { this->protocol = (kConfigSwitches & 1); }
+
+// ==========[ Pixel port ]==========
 
 __sbit __at(0x90) g_pixelPortDataIn;
 __sbit __at(0x91) g_pixelPortClock;
@@ -99,6 +118,8 @@ void pixelPortWritePixel(uint8_t x, uint8_t y, bool dir) {
 
     watchdog();
 }
+
+// ==========[ Framebuffer ]==========
 
 typedef struct {
     uint8_t blocks[BLOCKS_PER_ROW * DISPLAY_H];
@@ -253,8 +274,6 @@ typedef struct {
     Message messages[4];
 } Framer;
 
-__xdata Framer g_framer;
-
 void framer_init(Framer* this) {
     this->state = FS_WANT_FRAME_START;
 
@@ -358,9 +377,14 @@ void framer_accept(Framer* this, uint8_t data) {
     }
 }
 
-volatile __xdata __at(0x8000) uint8_t kConfig = 0;
+// ==========[ Program ]==========
 
-volatile uint8_t g_recv = 0;
+__near Config g_config;
+
+__xdata Framer g_framer;
+
+__xdata Framebuffer g_current;
+__xdata Framebuffer g_buffer;
 
 void interrupt_external_0(void) __interrupt(0) {
     // Disabled
@@ -385,43 +409,53 @@ void interrupt_serial(void) __interrupt(4) {
     RI = false;
 }
 
-volatile __xdata __at(0x1FF8 | (1 << 13)) uint8_t g_clockData[7];
-
-__xdata Framebuffer g_current;
-__xdata Framebuffer g_buffer;
-
 void main(void) {
+    config_init(&g_config);
 
-    // Serial mode setup
-    {
-        // 01...... = 8 bit UART
-        // ..0..... = Disable multiprocessor communication
-        // ...1.... = Enable serial reception
-        // ....0... = 9th bit to transmit
-        SCON = 0b01010000;
+    switch (g_config.protocol) {
+        case CP_FGY: {
+            // 11...... = 9 bit UART
+            // ..0..... = Disable multiprocessor communication
+            // ...1.... = Enable serial reception
+            // ....0... = 9th bit to transmit
+            SCON = 0b11010000;
 
-        // Enable interrupt
-        ES = true;
+            // 0...---- = Enable timer with TR1
+            // .0..---- = Use system clock as source
+            // ..10---- = 8-bit auto reload timer (reloaded from TH1)
+            TMOD = 0b00100000;
 
-        // High priority interrupt
-        PS = 1;
-    }
+            // (19200 baud rate generator), 11.0592 MHz crystal
+            PCON = 0b10000000;
+            TH1 = 0xFD;
+        } break;
 
-    // Timer 1 setup (9600 baud rate generator), 11.0592 MHz crystal
-    {
-        // 0...---- = Enable timer with TR1
-        // .0..---- = Use system clock as source
-        // ..10---- = 8-bit auto reload timer (reloaded from TH1)
-        TMOD = 0b00100000;
+        case CP_VMX: {
+            // 01...... = 8 bit UART
+            // ..0..... = Disable multiprocessor communication
+            // ...1.... = Enable serial reception
+            // ....0... = 9th bit to transmit
+            SCON = 0b01010000;
 
-        // Required reset value
-        TH1 = 0xFD;
+            // 0...---- = Enable timer with TR1
+            // .0..---- = Use system clock as source
+            // ..10---- = 8-bit auto reload timer (reloaded from TH1)
+            TMOD = 0b00100000;
+
+            // (9600 baud rate generator), 11.0592 MHz crystal
+            PCON = 0b00000000;
+            TH1 = 0xFD;
+        } break;
     }
 
     framer_init(&g_framer);
 
     // Finish startup
     {
+        // Enable high priority serial interrupt
+        ES = true;
+        PS = 1;
+
         // Enable specified interrupts
         EA = true;
 
