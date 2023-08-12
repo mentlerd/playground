@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.26)
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
 find_program(MAKEBIN makebin REQUIRED)
 
 project(flipdot_firmware C)
@@ -34,11 +36,27 @@ set_target_properties(firmware PROPERTIES
 	C_EXTENSIONS YES
 )
 
+# Generate .bin file that can be directly flashed on a M27C256B compatible chips
 add_custom_command(
 	DEPENDS firmware
-	OUTPUT ${PROJECT_BINARY_DIR}/firmware.bin
+	OUTPUT ${PROJECT_BINARY_DIR}/firmware_256.bin
 	COMMAND ${MAKEBIN}
-	ARGS -s 0x8000 $<TARGET_FILE:firmware> ${PROJECT_BINARY_DIR}/firmware.bin
+	ARGS -s 0x8000 $<TARGET_FILE:firmware> ${PROJECT_BINARY_DIR}/firmware_256.bin
 )
 
-add_custom_target(firmware_bin ALL DEPENDS ${PROJECT_BINARY_DIR}/firmware.bin)
+# Generate .bin file that can be directly flashed on M27C512B compatible chips
+add_custom_command(
+	DEPENDS ${PROJECT_BINARY_DIR}/firmware_256.bin
+	OUTPUT ${PROJECT_BINARY_DIR}/firmware_512.bin
+	COMMAND ${Python3_EXECUTABLE}
+	ARGS
+		${PROJECT_SOURCE_DIR}/scripts/concat.py
+		${PROJECT_BINARY_DIR}/firmware_512.bin
+		${PROJECT_BINARY_DIR}/firmware_256.bin
+		${PROJECT_BINARY_DIR}/firmware_256.bin
+)
+
+add_custom_target(firmware_bin ALL DEPENDS
+	${PROJECT_BINARY_DIR}/firmware_256.bin
+	${PROJECT_BINARY_DIR}/firmware_512.bin
+)

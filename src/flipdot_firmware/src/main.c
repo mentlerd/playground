@@ -37,6 +37,22 @@
 
 __sbit __at(0xB5) g_watchdogResetPin;
 
+unsigned char __sdcc_external_startup(void) {
+    // Disable interrupts
+    IE = 0;
+
+    // Give time for the hardware to initialize
+    for (uint8_t i = 0; i < 100; i++) {
+        for (uint8_t j = 0; j < 60; j++) {
+            continue;
+        }
+    }
+
+    // Disable watchdog until initialization is complete
+    g_watchdogResetPin = true;
+    return 0;
+}
+
 void watchdog(void) {
     g_watchdogResetPin = true;
     g_watchdogResetPin = false;
@@ -375,8 +391,6 @@ __xdata Framebuffer g_current;
 __xdata Framebuffer g_buffer;
 
 void main(void) {
-    delay();
-    delay();
 
     // Serial mode setup
     {
