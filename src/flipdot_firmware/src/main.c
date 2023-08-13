@@ -209,6 +209,83 @@ void delay(void) {
     }
 }
 
+// ==========[ Uploader ]==========
+
+#define UPLOAD_W 72
+#define UPLOAD_H 7
+
+#if DISPLAY_W > UPLOAD_W || DISPLAY_W < 8
+#error "Bad display size"
+#endif
+
+typedef struct {
+    uint8_t* front;
+    uint8_t offset;
+
+    uint8_t x;
+    uint8_t y;
+} Upload;
+
+Upload g_upload;
+Upload g_uploadCheckpoint;
+
+void upload_start(Framebuffer* into) {
+    g_upload.front = into->pixels;
+    g_upload.offset = 0;
+
+    g_upload.x = 0;
+    g_upload.y = 0;
+}
+
+// NB: Internal function
+void upload_append(uint8_t pixels, uint8_t width) {
+    // Accept high bits unconditionally
+    *g_upload.front = *g_upload.front & ~(0xFF << g_upload.offset) | (pixels << g_upload.offset);
+
+    // Advance offset
+    g_upload.offset += width;
+
+    // Finish offcut writes
+    if (g_upload.offset >= 8) {
+        g_upload.offset = g_upload.offset & 7;
+
+        *(++g_upload.front) = pixels >> (8 - g_upload.offset);
+    }
+}
+
+void upload_accept(uint8_t pixels) {
+    if (g_upload.y >= DISPLAY_H) {
+        return; // Upload complete
+    }
+
+    // Accept pixels before the blanking interval
+    if (g_upload.x < DISPLAY_W) {
+        uint8_t accept = (DISPLAY_W - g_upload.x);
+
+        if (accept > 8) {
+            accept = 8;
+        }
+
+        upload_append(pixels, accept);
+    }
+
+    // Check how many pixels to consume in this row
+    uint8_t consume = (UPLOAD_W - g_upload.x);
+
+    if (consume > 8) {
+        g_upload.x += 8;
+        return;
+    }
+
+    // We hit the end of the row, advance to next one
+    g_upload.x = 8 - consume;
+    g_upload.y++;
+
+    if (g_upload.x) {
+        upload_append(pixels >> consume, g_upload.x);
+    }
+}
+
 typedef enum {
     MT_COMMAND = 0,
     MT_DMA = 1,
