@@ -10,9 +10,8 @@ add_executable(firmware
 	src/main.c
 )
 
-target_compile_definitions(firmware PRIVATE
-	"DISPLAY_W=48"
-	"DISPLAY_H=16"
+target_include_directories(firmware PRIVATE
+	${SDCC_LIB_PATH}
 )
 
 target_compile_options(firmware PRIVATE
@@ -24,6 +23,7 @@ target_compile_options(firmware PRIVATE
 
 	# All functions in the source file will be compiled as reentrant (until code size/speed is an issue)
 	"--stack-auto"
+	"--model-small"
 
 	# Using M48T08-150PC1, RAM is limited
 	"--xram-loc=0x0"

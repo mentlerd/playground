@@ -3,18 +3,17 @@
 #error "Code is not reentrancy aware"
 #endif
 
-#ifndef DISPLAY_W
-#define DISPLAY_W 16
-#endif
-
-#ifndef DISPLAY_H
-#define DISPLAY_H 16
-#endif
-
 #include <8051.h>
 
 #include <stdbool.h>
 #include <stdint.h>
+
+// TODO: I don't know why but SDCC links against an incorrect stdlib? Multibyte
+//  support routines expect their arguments in variables which are never set.
+//
+// As a pretty stupid workaround I am including the source in my file to compile the
+//  intrinsic with the correct flags.
+#include "_mulint.c"
 
 // ==========[ Startup/Watchdog ]==========
 
@@ -40,21 +39,6 @@ void watchdog(void) {
     g_watchdogResetPin = true;
     g_watchdogResetPin = false;
 }
-
-// ==========[ Configuration ]==========
-
-volatile __xdata __at(0x8000) uint8_t kConfigSwitches = 0;
-
-typedef enum {
-    CP_FGY = 0,
-    CP_VMX = 1,
-} Protocol;
-
-typedef struct {
-    Protocol protocol;
-} Config;
-
-void config_init(Config* this) { this->protocol = (kConfigSwitches & 1); }
 
 // ==========[ Pixel port ]==========
 
@@ -100,25 +84,30 @@ void pixelPortWritePixel(uint8_t x, uint8_t y, bool dir) {
     watchdog();
 }
 
-// ==========[ Framebuffer ]==========
+// ==========[ Image data ]==========
+__data uint8_t g_imageW;
+__data uint8_t g_imageH;
 
-typedef struct {
-    uint8_t pixels[(DISPLAY_W * DISPLAY_H + 7) / 8];
-} Framebuffer;
+__data uint16_t g_imageStride;
 
-void framebuffer_pixel(Framebuffer* this, uint8_t x, uint8_t y, bool target) {
-    if (DISPLAY_W <= x || DISPLAY_H <= y) {
+__data uint8_t g_imageLimit;
+
+__xdata uint8_t g_pixels[1000];
+
+void pixel(uint8_t x, uint8_t y, bool target) {
+    if (g_imageW <= x || g_imageH <= y) {
         return;
     }
 
-    uint16_t pixelIndex = (x + y * ((uint8_t)DISPLAY_W));
+    uint16_t pixelIndex = (x + y * g_imageW);
+    uint16_t blockIndex = g_imageStride + pixelIndex / 8u;
 
-    uint8_t block = this->pixels[pixelIndex / 8u];
+    uint8_t block = g_pixels[blockIndex];
     uint8_t index = pixelIndex % 8u;
 
     bool current = (block >> index) & 1;
     if (current != target) {
-        this->pixels[pixelIndex / 8u] = block ^ (1 << index);
+        g_pixels[blockIndex] = block ^ (1 << index);
     }
 }
 
@@ -141,28 +130,37 @@ const uint8_t kSmallHexFont[16][3] = {
     {0b11111, 0b10100, 0b10000}, // F
 };
 
-void framebuffer_hex(Framebuffer* this, uint8_t x, uint8_t y, uint8_t value) {
+void hex_char(uint8_t x, uint8_t y, uint8_t value) {
     value = value & 15;
 
     for (uint8_t offX = 0; offX < 3; offX++) {
         uint8_t column = kSmallHexFont[value][offX];
 
         for (uint8_t offY = 0; offY < 5; offY++) {
-            framebuffer_pixel(this, x + offX, y + offY, (column >> (4 - offY)) & 1);
+            pixel(x + offX, y + offY, (column >> (4 - offY)) & 1);
         }
     }
 }
 
-void framebuffer_hex_string(Framebuffer* this, uint8_t x, uint8_t y, uint8_t data[], uint8_t len) {
+void hex_str(uint8_t x, uint8_t y, uint8_t data[], uint8_t len) {
     for (uint8_t i = 0; i < len; i++) {
-        framebuffer_hex(this, x + i * 8 + 0, y, data[i] >> 4);
-        framebuffer_hex(this, x + i * 8 + 4, y, data[i] & 15);
+        hex_char(x + i * 8 + 0, y, data[i] >> 4);
+        hex_char(x + i * 8 + 4, y, data[i] & 15);
     }
 }
 
-void framebuffer_blit(Framebuffer* this, const Framebuffer* buffer, bool diff) {
-    uint8_t* currentFront = this->pixels;
-    uint8_t* targetFront = buffer->pixels;
+void hex_u8(uint8_t x, uint8_t y, uint8_t value) {
+    hex_str(x, y, &value, 1);
+}
+
+void hex_u16(uint8_t x, uint8_t y, uint16_t value) {
+    hex_u8(x, y, value >> 8);
+    hex_u8(x + 8, y, value & 0xFF);
+}
+
+void blit(uint8_t image, bool diff) {
+    __xdata uint8_t* currentFront = &g_pixels[0];
+    __xdata uint8_t* targetFront = &g_pixels[image * g_imageStride];
 
     uint8_t x = 0;
     uint8_t y = 0;
@@ -190,257 +188,182 @@ void framebuffer_blit(Framebuffer* this, const Framebuffer* buffer, bool diff) {
             target >>= 1;
             mask >>= 1;
 
-            if (++x == DISPLAY_W) {
+            if (++x == g_imageW) {
                 x = 0;
 
-                if (++y == DISPLAY_H) {
+                if (++y == g_imageH) {
                     return;
                 }
             }
         }
+
+        watchdog();
     }
 }
 
-void delay(void) {
-    for (uint8_t i = 0; i < 50; i++) {
-        for (uint8_t j = 0; j < 100; j++) {
-            watchdog();
-        }
-    }
-}
-
-// ==========[ Uploader ]==========
-
-#define UPLOAD_W 72
-#define UPLOAD_H 7
-
-#if DISPLAY_W > UPLOAD_W || DISPLAY_W < 8
-#error "Bad display size"
-#endif
-
-typedef struct {
-    uint8_t* front;
-    uint8_t offset;
-
-    uint8_t x;
-    uint8_t y;
-} Upload;
-
-Upload g_upload;
-Upload g_uploadCheckpoint;
-
-void upload_start(Framebuffer* into) {
-    g_upload.front = into->pixels;
-    g_upload.offset = 0;
-
-    g_upload.x = 0;
-    g_upload.y = 0;
-}
-
-// NB: Internal function
-void upload_append(uint8_t pixels, uint8_t width) {
-    // Accept high bits unconditionally
-    *g_upload.front = *g_upload.front & ~(0xFF << g_upload.offset) | (pixels << g_upload.offset);
-
-    // Advance offset
-    g_upload.offset += width;
-
-    // Finish offcut writes
-    if (g_upload.offset >= 8) {
-        g_upload.offset = g_upload.offset & 7;
-
-        *(++g_upload.front) = pixels >> (8 - g_upload.offset);
-    }
-}
-
-void upload_accept(uint8_t pixels) {
-    if (g_upload.y >= DISPLAY_H) {
-        return; // Upload complete
-    }
-
-    // Accept pixels before the blanking interval
-    if (g_upload.x < DISPLAY_W) {
-        uint8_t accept = (DISPLAY_W - g_upload.x);
-
-        if (accept > 8) {
-            accept = 8;
-        }
-
-        upload_append(pixels, accept);
-    }
-
-    // Check how many pixels to consume in this row
-    uint8_t consume = (UPLOAD_W - g_upload.x);
-
-    if (consume > 8) {
-        g_upload.x += 8;
-        return;
-    }
-
-    // We hit the end of the row, advance to next one
-    g_upload.x = 8 - consume;
-    g_upload.y++;
-
-    if (g_upload.x) {
-        upload_append(pixels >> consume, g_upload.x);
-    }
-}
+// ==========[ Serial protocol ]==========
 
 typedef enum {
-    MT_COMMAND = 0,
-    MT_DMA = 1,
-} MessageType;
-
-typedef struct {
-    uint8_t type;
-    uint8_t payload[16];
-} Message;
-
-typedef enum {
-    FS_WANT_FRAME_START = 0,
-    FS_WANT_ADDR = 1,
-    FS_WANT_TYPE = 2,
-    FS_WANT_PAYLOAD = 3,
-    FS_WANT_PAYLOAD_CLOSE = 4,
-    FS_WANT_CHECKSUM = 5,
-    FS_WANT_IGNORE = 6,
+    FS_WANT_FRAME_START,
+    FS_WANT_ADDR,
+    FS_WANT_TYPE,
+    FS_WANT_DATA,
+    FS_WANT_CLOSE,
+    FS_WANT_CHECKSUM,
+    FS_WANT_IGNORE,
 } FramerState;
 
 typedef enum {
-    ERR_NONE = 0,
-    ERR_ADDR = 1,
-    ERR_PAYLOAD_TERM = 2,
-    ERR_CHECKSUM = 3,
+    FE_NONE,
+    FE_BAD_ADDR,
+    FE_BAD_CLOSE,
+    FE_BAD_CHECKSUM,
+    FE_NO_UPLOAD,
 } FramerError;
 
-typedef struct {
-    uint8_t numBytesReceived;
+__data struct {
+    uint16_t bytesReceived;
+
+    __xdata uint8_t* front;
+} g_upload;
+
+__data struct {
+    uint8_t totalBytes;
+    uint8_t totalMessages;
+
+    uint8_t addr;
 
     FramerState state;
     FramerError error;
 
-    uint8_t stateBytesRemain;
+    uint8_t stateBytesExpected;
+    uint8_t stateBytesReceived;
+
     uint8_t checksum;
+    uint8_t type;
+    uint8_t data[16];
+} g_framer;
 
-    uint8_t messageWriteFront;
-    uint8_t messageAvailableFront;
+void framer_complete(void) {
+    g_framer.totalMessages++;
 
-    uint8_t messageReadFront;
+    if (g_framer.type == 0x80) {
+        g_upload.bytesReceived += 16;
+        g_upload.front += 16;
 
-    Message messages[4];
-} Framer;
+        if (g_upload.bytesReceived >= g_imageStride) {
+            g_upload.front = 0;
+        }
+        return;
+    }
 
-void framer_init(Framer* this) {
-    this->state = FS_WANT_FRAME_START;
+    if (g_framer.data[0] != 0x10) {
+        return;
+    }
 
-    this->messageWriteFront = 1;
-    this->messageAvailableFront = 0;
-    this->messageReadFront = 0;
+    switch (g_framer.data[1]) {
+        case 0x02: { // Image upload start
+            g_upload.bytesReceived = 0;
+            g_upload.front = &g_pixels[g_imageStride * 2];
+        } break;
+    }
 }
 
-void framer_accept(Framer* this, uint8_t data) {
-    this->numBytesReceived++;
+void framer_accept(uint8_t data) {
+    g_framer.totalBytes++;
+    g_framer.checksum += data;
 
-    Message* msg = &this->messages[this->messageWriteFront];
-
-    switch (this->state) {
+    switch (g_framer.state) {
         case FS_WANT_FRAME_START: {
+            g_framer.checksum = data;
+
             if (data != 0x78) {
                 return;
             }
 
-            this->checksum = data;
-
-            this->state = FS_WANT_ADDR;
-            this->error = ERR_NONE;
+            g_framer.state = FS_WANT_ADDR;
         } break;
 
         case FS_WANT_ADDR: {
-            this->checksum += data;
+            if (g_framer.addr != data) {
+                g_framer.error = FE_BAD_ADDR;
 
-            if (data != 1) {
-                this->state = FS_WANT_IGNORE;
-                this->stateBytesRemain = 19;
-
-                this->error = ERR_ADDR;
+                g_framer.state = FS_WANT_IGNORE;
+                g_framer.stateBytesExpected = 19;
+                g_framer.stateBytesReceived = 0;
                 return;
             }
 
-            this->state = FS_WANT_TYPE;
+            g_framer.state = FS_WANT_TYPE;
         } break;
 
         case FS_WANT_TYPE: {
-            this->checksum += data;
+            g_framer.type = data;
 
-            msg->type = data;
+            if (g_framer.type == 0x80 && !g_upload.front) {
+                g_framer.error = FE_NO_UPLOAD;
 
-            this->state = FS_WANT_PAYLOAD;
-            this->stateBytesRemain = sizeof(msg->payload);
-        } break;
-
-        case FS_WANT_PAYLOAD: {
-            this->checksum += data;
-
-            msg->payload[sizeof(msg->payload) - this->stateBytesRemain - 1] = data;
-
-            if (--this->stateBytesRemain != 0) {
+                g_framer.state = FS_WANT_IGNORE;
+                g_framer.stateBytesExpected = 20;
+                g_framer.stateBytesReceived = 0;
                 return;
             }
 
-            this->state = FS_WANT_PAYLOAD_CLOSE;
+            g_framer.state = FS_WANT_DATA;
+            g_framer.stateBytesExpected = sizeof(g_framer.data);
+            g_framer.stateBytesReceived = 0;
         } break;
 
-        case FS_WANT_PAYLOAD_CLOSE: {
-            this->checksum += data;
+        case FS_WANT_DATA: {
+            if (g_framer.type == 0x80) {
+                *(g_upload.front + g_framer.stateBytesReceived) = data;
+            } else {
+                g_framer.data[g_framer.stateBytesReceived] = data;
+            }
 
+            if (++g_framer.stateBytesReceived != g_framer.stateBytesExpected) {
+                return;
+            }
+
+            g_framer.state = FS_WANT_CLOSE;
+        } break;
+
+        case FS_WANT_CLOSE: {
             if (data != 0x0) {
-                this->state = FS_WANT_IGNORE;
-                this->stateBytesRemain = 1;
+                g_framer.state = FE_BAD_CLOSE;
 
-                this->error = ERR_PAYLOAD_TERM;
+                g_framer.state = FS_WANT_IGNORE;
+                g_framer.stateBytesExpected = 1;
+                g_framer.stateBytesReceived = 0;
                 return;
             }
 
-            this->state = FS_WANT_CHECKSUM;
+            g_framer.state = FS_WANT_CHECKSUM;
         } break;
 
         case FS_WANT_CHECKSUM: {
-            this->checksum += data;
-            this->state = FS_WANT_FRAME_START;
+            if (g_framer.checksum == 0) {
+                g_framer.error = FE_NONE;
 
-            if (this->checksum != 0) {
-                this->error = ERR_CHECKSUM;
-                return;
+                framer_complete();
+            } else {
+                g_framer.error = FE_BAD_CHECKSUM;
             }
 
-            uint8_t nextFront = this->messageWriteFront + 1;
-
-            // TODO: Arithmetic is broken
-            if (nextFront == sizeof(this->messages) - 1) {
-                nextFront = 0;
-            }
-
-            this->messageWriteFront = nextFront;
+            g_framer.state = FS_WANT_FRAME_START;
         } break;
 
         case FS_WANT_IGNORE: {
-            if (--this->stateBytesRemain != 0) {
+            if (++g_framer.stateBytesReceived != g_framer.stateBytesExpected) {
                 return;
             }
 
-            this->state = FS_WANT_FRAME_START;
+            g_framer.state = FS_WANT_FRAME_START;
         } break;
     }
 }
 
 // ==========[ Program ]==========
-
-__near Config g_config;
-
-__xdata Framer g_framer;
-
-__xdata Framebuffer g_current;
-__xdata Framebuffer g_buffer;
 
 void interrupt_external_0(void) __interrupt(0) {
     // Disabled
@@ -459,52 +382,39 @@ void interrupt_timer_1(void) __interrupt(3) {
 }
 
 void interrupt_serial(void) __interrupt(4) {
-    framer_accept(&g_framer, SBUF);
+    framer_accept(SBUF);
 
     // Clear interrupt flag to continue receiving interrupts
     RI = false;
 }
 
 void main(void) {
-    config_init(&g_config);
+    {
+        // 01...... = 8 bit UART
+        // ..0..... = Disable multiprocessor communication
+        // ...1.... = Enable serial reception
+        // ....0... = 9th bit to transmit
+        SCON = 0b01010000;
 
-    switch (g_config.protocol) {
-        case CP_FGY: {
-            // 11...... = 9 bit UART
-            // ..0..... = Disable multiprocessor communication
-            // ...1.... = Enable serial reception
-            // ....0... = 9th bit to transmit
-            SCON = 0b11010000;
+        // 0...---- = Enable timer with TR1
+        // .0..---- = Use system clock as source
+        // ..10---- = 8-bit auto reload timer (reloaded from TH1)
+        TMOD = 0b00100000;
 
-            // 0...---- = Enable timer with TR1
-            // .0..---- = Use system clock as source
-            // ..10---- = 8-bit auto reload timer (reloaded from TH1)
-            TMOD = 0b00100000;
-
-            // (19200 baud rate generator), 11.0592 MHz crystal
-            PCON = 0b10000000;
-            TH1 = 0xFD;
-        } break;
-
-        case CP_VMX: {
-            // 01...... = 8 bit UART
-            // ..0..... = Disable multiprocessor communication
-            // ...1.... = Enable serial reception
-            // ....0... = 9th bit to transmit
-            SCON = 0b01010000;
-
-            // 0...---- = Enable timer with TR1
-            // .0..---- = Use system clock as source
-            // ..10---- = 8-bit auto reload timer (reloaded from TH1)
-            TMOD = 0b00100000;
-
-            // (9600 baud rate generator), 11.0592 MHz crystal
-            PCON = 0b00000000;
-            TH1 = 0xFD;
-        } break;
+        // (9600 baud rate generator), 11.0592 MHz crystal
+        PCON = 0b00000000;
+        TH1 = 0xFD;
     }
 
-    framer_init(&g_framer);
+    {
+        g_imageW = 32;
+        g_imageH = 16;
+
+        g_imageStride = (g_imageW * g_imageH + 7) / 8u;
+        g_imageLimit = sizeof(g_pixels) / g_imageStride;
+
+        g_framer.addr = 1;
+    }
 
     // Finish startup
     {
@@ -522,19 +432,30 @@ void main(void) {
     g_serialReceiveDisable = false;
     g_pixelPortDisable = false;
 
-    framebuffer_blit(&g_current, &g_buffer, false);
+    blit(0, false);
 
     while (true) {
-        for (uint8_t i = 0; i < 16; i++) {
-            framebuffer_hex_string(&g_buffer, 0, 0, &g_framer.numBytesReceived, 1);
-            framebuffer_hex_string(&g_buffer, 10, 0, &g_framer.state, 1);
-            watchdog();
+        // Cycle through images
+        for (uint8_t image = 1; image <= 2; image++) {
 
-            framebuffer_hex_string(&g_buffer, 20, 0, &g_framer.error, 1);
-            framebuffer_hex_string(&g_buffer, 30, 0, &g_framer.messageWriteFront, 1);
+            // Update debug image with info
+            hex_u8(0, 0, g_framer.totalBytes);
+            hex_u8(8, 0, g_framer.totalMessages);
 
-            framebuffer_blit(&g_current, &g_buffer, true);
-            delay();
+            hex_u8(0, 5, g_framer.state);
+            hex_u8(8, 5, g_framer.error);
+
+            hex_u8(0, 11, g_framer.type);
+            hex_u8(8, 11, g_framer.data[1]);
+
+            // Draw active image
+            blit(image, true);
+
+            for (uint8_t j = 0; j < 200; j++) {
+                for (uint8_t k = 0; k < 200; k++) {
+                    watchdog();
+                }
+            }
         }
     }
 }
