@@ -203,6 +203,12 @@ void blit(uint8_t image, bool diff) {
 
 // ==========[ Serial protocol ]==========
 
+const uint8_t kMirrorHelper[16] = {0b0000, 0b1000, 0b0100, 0b1100, 0b0010, 0b1010, 0b0110, 0b1110, 0b0001, 0b1001, 0b0101, 0b1101, 0b0011, 0b1011, 0b0111, 0b1111};
+
+uint8_t mirror(uint8_t value) {
+    return kMirrorHelper[value >> 4] | kMirrorHelper[value & 15] << 4;
+}
+
 typedef enum {
     FS_WANT_FRAME_START,
     FS_WANT_ADDR,
@@ -316,7 +322,7 @@ void framer_accept(uint8_t data) {
 
         case FS_WANT_DATA: {
             if (g_framer.type == 0x80) {
-                *(g_upload.front + g_framer.stateBytesReceived) = data;
+                *(g_upload.front + g_framer.stateBytesReceived) = mirror(data);
             } else {
                 g_framer.data[g_framer.stateBytesReceived] = data;
             }
@@ -407,7 +413,7 @@ void main(void) {
     }
 
     {
-        g_imageW = 32;
+        g_imageW = 80;
         g_imageH = 16;
 
         g_imageStride = (g_imageW * g_imageH + 7) / 8u;
