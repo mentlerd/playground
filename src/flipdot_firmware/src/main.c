@@ -32,7 +32,9 @@ unsigned char __sdcc_external_startup(void) {
 
     // Disable watchdog until initialization is complete
     g_watchdogResetPin = true;
-    return 0;
+
+    // Disable static initialization
+    return 1;
 }
 
 void watchdog(void) {
@@ -94,13 +96,13 @@ __data uint8_t g_imageLimit;
 
 __xdata uint8_t g_pixels[1000];
 
-void pixel(uint8_t x, uint8_t y, bool target) {
-    if (g_imageW <= x || g_imageH <= y) {
+void set_pixel(uint8_t image, uint8_t x, uint8_t y, bool target) {
+    if (g_imageW <= x || g_imageH <= y || g_imageLimit < image) {
         return;
     }
 
     uint16_t pixelIndex = (x + y * g_imageW);
-    uint16_t blockIndex = g_imageStride + pixelIndex / 8u;
+    uint16_t blockIndex = (image * g_imageStride) + pixelIndex / 8u;
 
     uint8_t block = g_pixels[blockIndex];
     uint8_t index = pixelIndex % 8u;
@@ -109,6 +111,20 @@ void pixel(uint8_t x, uint8_t y, bool target) {
     if (current != target) {
         g_pixels[blockIndex] = block ^ (1 << index);
     }
+}
+
+bool get_pixel(uint8_t image, uint8_t x, uint8_t y) {
+    if (g_imageW <= x || g_imageH <= y || g_imageLimit < image) {
+        return false;
+    }
+
+    uint16_t pixelIndex = (x + y * g_imageW);
+    uint16_t blockIndex = (image * g_imageStride) + pixelIndex / 8u;
+
+    uint8_t block = g_pixels[blockIndex];
+    uint8_t index = pixelIndex % 8u;
+
+    return (block >> index) & 1;
 }
 
 const uint8_t kSmallHexFont[16][3] = {
@@ -130,32 +146,32 @@ const uint8_t kSmallHexFont[16][3] = {
     {0b11111, 0b10100, 0b10000}, // F
 };
 
-void hex_char(uint8_t x, uint8_t y, uint8_t value) {
+void hex_char(uint8_t image, uint8_t x, uint8_t y, uint8_t value) {
     value = value & 15;
 
     for (uint8_t offX = 0; offX < 3; offX++) {
         uint8_t column = kSmallHexFont[value][offX];
 
         for (uint8_t offY = 0; offY < 5; offY++) {
-            pixel(x + offX, y + offY, (column >> (4 - offY)) & 1);
+            set_pixel(image, x + offX, y + offY, (column >> (4 - offY)) & 1);
         }
     }
 }
 
-void hex_str(uint8_t x, uint8_t y, uint8_t data[], uint8_t len) {
+void hex_str(uint8_t image, uint8_t x, uint8_t y, uint8_t data[], uint8_t len) {
     for (uint8_t i = 0; i < len; i++) {
-        hex_char(x + i * 8 + 0, y, data[i] >> 4);
-        hex_char(x + i * 8 + 4, y, data[i] & 15);
+        hex_char(image, x + i * 8 + 0, y, data[i] >> 4);
+        hex_char(image, x + i * 8 + 4, y, data[i] & 15);
     }
 }
 
-void hex_u8(uint8_t x, uint8_t y, uint8_t value) {
-    hex_str(x, y, &value, 1);
+void hex_u8(uint8_t image, uint8_t x, uint8_t y, uint8_t value) {
+    hex_str(image, x, y, &value, 1);
 }
 
-void hex_u16(uint8_t x, uint8_t y, uint16_t value) {
-    hex_u8(x, y, value >> 8);
-    hex_u8(x + 8, y, value & 0xFF);
+void hex_u16(uint8_t image, uint8_t x, uint8_t y, uint16_t value) {
+    hex_u8(image, x, y, value >> 8);
+    hex_u8(image, x + 8, y, value & 0xFF);
 }
 
 void blit(uint8_t image, bool diff) {
@@ -198,6 +214,98 @@ void blit(uint8_t image, bool diff) {
         }
 
         watchdog();
+    }
+}
+
+void blit_pixel(uint8_t image, uint8_t x, uint8_t y) {
+    bool current = get_pixel(0, x, y);
+    bool target = get_pixel(image, x, y);
+
+    if (current != target) {
+        pixelPortWritePixel(x, y, target);
+        set_pixel(0, x, y, target);
+    }
+}
+
+void blit_vertical(uint8_t image) {
+    for (uint8_t x = 0; x < g_imageW; x++) {
+        for (uint8_t y = 0; y < g_imageH; y++) {
+            blit_pixel(image, x, y);
+        }
+
+        watchdog();
+    }
+}
+
+void blit_slanted(uint8_t image) {
+    for (uint8_t x = 0; x < g_imageW + g_imageH; x++) {
+        for (uint8_t y = 0; y < g_imageW; y++) {
+            if (x < y) {
+                continue;
+            }
+
+            blit_pixel(image, x - y, y);
+        }
+    }
+}
+
+void blit_vertical_scan(uint8_t image) {
+    uint8_t black = 4;
+    uint8_t white = 8;
+
+    for (uint8_t x = 0; x < g_imageW + white; x++) {
+        for (uint8_t y = 0; y < g_imageH; y++) {
+            pixelPortWritePixel(x, y, false);
+        }
+        watchdog();
+
+        if (black <= x) {
+            uint8_t lX = x - black;
+
+            for (uint8_t y = 0; y < g_imageH; y++) {
+                pixelPortWritePixel(lX, y, true);
+            }
+        }
+        if (white <= x) {
+            uint8_t lX = x - white;
+
+            for (uint8_t y = 0; y < g_imageH; y++) {
+                bool target = get_pixel(image, lX, y);
+                if (!target) {
+                    pixelPortWritePixel(lX, y, target);
+                }
+
+                set_pixel(0, lX, y, target);
+            }
+            watchdog();
+        }
+    }
+}
+
+const uint8_t kStepHelper[5] = {0, 1, 0, 255, 0};
+
+void blit_snake(uint8_t image) {
+    uint8_t x = 7;
+    uint8_t y = 7;
+
+    uint8_t dir = 2;
+
+    for (uint8_t len = 1; len < 16; len++) {
+        for (uint8_t turn = 0; turn < 3; turn++) {
+            dir = (dir - 1) & 3;
+
+            for (uint8_t step = 0; step < len; step++) {
+                blit_pixel(image, x, y);
+
+                x += kStepHelper[dir];
+                y += kStepHelper[dir + 1];
+            }
+            watchdog();
+        }
+
+        blit_pixel(image, x, y);
+        x += kStepHelper[dir];
+        y += kStepHelper[dir + 1];
     }
 }
 
@@ -438,24 +546,43 @@ void main(void) {
     g_serialReceiveDisable = false;
     g_pixelPortDisable = false;
 
-    blit(0, false);
+    // Setup initial set of images
+    for (uint8_t x = 0; x < g_imageW; x++) {
+        for (uint8_t y = 0; y < g_imageH; y++) {
+            set_pixel(1, x, y, false);
+
+            // set_pixel(2, x, y, (x & 1) == (y & 1));
+            // set_pixel(3, x, y, (x & 1) != (y & 1));
+
+            set_pixel(2, x, y, false);
+            set_pixel(3, x, y, true);
+
+            set_pixel(4, x, y, (x & 1));
+            set_pixel(5, x, y, (y & 1));
+
+            watchdog();
+        }
+    }
+
+    blit(1, false);
+    watchdog();
 
     while (true) {
+        // Update debug image with info
+        hex_u8(1, 0, 0, g_imageLimit);
+        hex_u8(1, 8, 0, g_framer.totalMessages);
+
+        hex_u8(1, 0, 5, g_framer.state);
+        hex_u8(1, 8, 5, g_framer.error);
+
+        hex_u8(1, 0, 11, g_framer.type);
+        hex_u8(1, 8, 11, g_framer.data[1]);
+
+        watchdog();
+
         // Cycle through images
-        for (uint8_t image = 1; image <= 2; image++) {
-
-            // Update debug image with info
-            hex_u8(0, 0, g_framer.totalBytes);
-            hex_u8(8, 0, g_framer.totalMessages);
-
-            hex_u8(0, 5, g_framer.state);
-            hex_u8(8, 5, g_framer.error);
-
-            hex_u8(0, 11, g_framer.type);
-            hex_u8(8, 11, g_framer.data[1]);
-
-            // Draw active image
-            blit(image, true);
+        for (uint8_t image = 1; image < g_imageLimit; image++) {
+            blit_snake(image);
 
             for (uint8_t j = 0; j < 200; j++) {
                 for (uint8_t k = 0; k < 200; k++) {
