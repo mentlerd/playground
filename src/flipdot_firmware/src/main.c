@@ -282,30 +282,46 @@ void blit_vertical_scan(uint8_t image) {
     }
 }
 
+// 0 = ( 0, +1) DOWN
+// 1 = (+1,  0) RIGHT
+// 2 = ( 0, -1) UP
+// 3 = (-1,  0) LEFT
 const uint8_t kStepHelper[5] = {0, 1, 0, 255, 0};
 
 void blit_snake(uint8_t image) {
-    uint8_t x = 7;
-    uint8_t y = 7;
+    uint8_t spread;
 
-    uint8_t dir = 2;
+    uint8_t walkX;
+    uint8_t walkY;
 
-    for (uint8_t len = 1; len < 16; len++) {
-        for (uint8_t turn = 0; turn < 3; turn++) {
-            dir = (dir - 1) & 3;
+    if (g_imageW < g_imageH) {
+        spread = g_imageW / 2u;
 
-            for (uint8_t step = 0; step < len; step++) {
-                blit_pixel(image, x, y);
+        walkX = 1;
+        walkY = 1 + g_imageH - g_imageW;
+    } else {
+        spread = g_imageH / 2u;
 
-                x += kStepHelper[dir];
-                y += kStepHelper[dir + 1];
-            }
-            watchdog();
+        walkX = 1 + g_imageW - g_imageH;
+        walkY = 1;
+    }
+
+    uint8_t x = spread - 1;
+    uint8_t y = spread - 1;
+
+    for (; spread; --spread) {
+        for (uint8_t len = walkX++; len; len--) {
+            blit_pixel(image, x++, y);
         }
-
-        blit_pixel(image, x, y);
-        x += kStepHelper[dir];
-        y += kStepHelper[dir + 1];
+        for (uint8_t len = walkY++; len; len--) {
+            blit_pixel(image, x, y++);
+        }
+        for (uint8_t len = walkX++; len; len--) {
+            blit_pixel(image, x--, y);
+        }
+        for (uint8_t len = walkY++; len; len--) {
+            blit_pixel(image, x, y--);
+        }
     }
 }
 
@@ -521,7 +537,7 @@ void main(void) {
     }
 
     {
-        g_imageW = 80;
+        g_imageW = 16 * 3;
         g_imageH = 16;
 
         g_imageStride = (g_imageW * g_imageH + 7) / 8u;
@@ -581,7 +597,7 @@ void main(void) {
         watchdog();
 
         // Cycle through images
-        for (uint8_t image = 1; image < g_imageLimit; image++) {
+        for (uint8_t image = 1; image < 6; image++) {
             blit_snake(image);
 
             for (uint8_t j = 0; j < 200; j++) {
